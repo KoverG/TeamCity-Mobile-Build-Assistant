@@ -1,0 +1,260 @@
+:host {
+  color: #1f2329;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+select,
+input {
+  font: inherit;
+}
+
+.tcba-shell {
+  position: fixed;
+  z-index: 2147483647;
+  right: 24px;
+  bottom: 24px;
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.tcba-launcher {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 16px;
+  color: #ffffff;
+  background: #6b57ff;
+  box-shadow: 0 12px 32px rgb(26 31 44 / 28%);
+  cursor: pointer;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+}
+
+.tcba-launcher:hover,
+.tcba-button:hover:not(:disabled) {
+  background: #5844e8;
+}
+
+.tcba-launcher:focus-visible,
+.tcba-icon-button:focus-visible,
+.tcba-button:focus-visible,
+select:focus-visible,
+input:focus-visible {
+  outline: 3px solid #9e91ff;
+  outline-offset: 3px;
+}
+
+.tcba-panel {
+  width: min(440px, calc(100vw - 112px));
+  max-height: min(720px, calc(100vh - 48px));
+  overflow: auto;
+  padding: 18px;
+  border: 1px solid rgb(31 35 41 / 12%);
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 18px 54px rgb(26 31 44 / 24%);
+}
+
+.tcba-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.tcba-panel__header div {
+  display: grid;
+  gap: 4px;
+}
+
+.tcba-panel__header strong {
+  font-size: 16px;
+}
+
+.tcba-panel__header span,
+.tcba-hint,
+.tcba-privacy {
+  color: #5f6672;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.tcba-icon-button {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 10px;
+  color: #4b5260;
+  background: #f1f3f5;
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.tcba-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 16px 0;
+  padding: 11px 12px;
+  border-radius: 12px;
+  color: #3e4653;
+  background: #f5f6f8;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.tcba-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: #21a366;
+}
+
+.tcba-dot--error {
+  background: #d83b3b;
+}
+
+.tcba-form {
+  display: grid;
+  gap: 14px;
+}
+
+.tcba-form label {
+  display: grid;
+  gap: 6px;
+  color: #424a57;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.tcba-form .tcba-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.tcba-checkbox input {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  margin: 1px 0 0;
+  accent-color: #6b57ff;
+}
+
+.tcba-form select {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 34px 8px 10px;
+  border: 1px solid #cdd2d9;
+  border-radius: 10px;
+  color: #20242a;
+  background: #ffffff;
+  font-weight: 450;
+}
+
+.tcba-button {
+  min-height: 40px;
+  padding: 9px 14px;
+  border: 0;
+  border-radius: 10px;
+  color: #ffffff;
+  background: #6b57ff;
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.tcba-button--secondary {
+  width: 100%;
+  color: #5c48e6;
+  background: #efecff;
+}
+
+.tcba-status + .tcba-button--secondary {
+  margin-bottom: 14px;
+}
+
+.tcba-button--secondary:hover:not(:disabled) {
+  color: #ffffff;
+}
+
+.tcba-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.tcba-empty,
+.tcba-hint {
+  margin: 0;
+}
+
+.tcba-result {
+  display: grid;
+  gap: 6px;
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid #b8dfc9;
+  border-radius: 12px;
+  background: #effaf3;
+  font-size: 12px;
+}
+
+.tcba-result--notfound,
+.tcba-result--ambiguous {
+  border-color: #f0c7aa;
+  background: #fff6ee;
+}
+
+.tcba-result span {
+  color: #59616e;
+}
+
+.tcba-result code {
+  overflow-wrap: anywhere;
+  color: #3e4653;
+  font-size: 11px;
+}
+
+.tcba-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.tcba-action-message {
+  margin: 12px 0 0;
+  color: #28744c;
+  font-size: 12px;
+}
+
+.tcba-privacy {
+  margin: 16px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid #ebecef;
+}
+
+@media (max-width: 560px) {
+  .tcba-shell {
+    right: 12px;
+    bottom: 12px;
+  }
+
+  .tcba-panel {
+    width: calc(100vw - 88px);
+    max-height: calc(100vh - 24px);
+  }
+
+}

@@ -1,0 +1,44 @@
+{
+  "name": "teamcity-mobile-build-assistant-extension",
+  "private": true,
+  "version": "0.3.6",
+  "type": "module",
+  "scripts": {
+    "dev:content": "vite build --watch --mode development --config vite.content.config.ts --configLoader native",
+    "dev:background": "vite build --watch --mode development --config vite.background.config.ts --configLoader native",
+    "build": "npm run typecheck && npm run build:content && npm run build:background",
+    "build:diagnostic": "npm run build",
+    "build:production": "npm run typecheck && npm run build:content:production && npm run build:background:production",
+    "build:content": "vite build --mode diagnostic --config vite.content.config.ts --configLoader native",
+    "build:content:production": "vite build --config vite.content.config.ts --configLoader native",
+    "build:background": "vite build --mode diagnostic --config vite.background.config.ts --configLoader native",
+    "build:background:production": "vite build --config vite.background.config.ts --configLoader native",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json --pretty false && tsc --noEmit -p tsconfig.node.json --pretty false",
+    "lint": "eslint .",
+    "test": "vitest --configLoader native",
+    "test:run": "vitest run --configLoader native"
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/chrome": "^0.2.5",
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.0.5",
+    "eslint": "^10.8.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.4",
+    "globals": "^17.9.0",
+    "jsdom": "^29.0.0",
+    "typescript": "~6.0.0",
+    "typescript-eslint": "^8.67.0",
+    "vite": "^8.2.1",
+    "vitest": "^4.1.10"
+  }
+}

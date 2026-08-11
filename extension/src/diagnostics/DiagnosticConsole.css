@@ -1,0 +1,160 @@
+.tcba-debug {
+  width: min(460px, calc(100vw - 112px));
+  height: min(620px, calc(100vh - 48px));
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+  color: #d9e0ea;
+  background: #151922;
+  border: 1px solid #333b49;
+  border-radius: 18px;
+  box-shadow: 0 18px 54px rgb(13 17 23 / 32%);
+}
+
+.tcba-debug__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  background: #1d2330;
+  border-bottom: 1px solid #333b49;
+}
+
+.tcba-debug__header div {
+  display: grid;
+  gap: 3px;
+}
+
+.tcba-debug__header strong {
+  color: #f3f6fa;
+  font-size: 13px;
+}
+
+.tcba-debug__header span {
+  color: #8e9bad;
+  font-size: 10px;
+}
+
+.tcba-debug__header .tcba-debug__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tcba-debug__clear {
+  padding: 5px 8px;
+  color: #b8c2d1;
+  cursor: pointer;
+  background: #293141;
+  border: 1px solid #3a4659;
+  border-radius: 7px;
+  font-size: 10px;
+}
+
+.tcba-debug__log {
+  padding: 10px 12px 16px;
+  overflow: auto;
+  font-family: Consolas, "SFMono-Regular", monospace;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.tcba-debug__empty {
+  margin: 0;
+  color: #778397;
+}
+
+.tcba-debug__event {
+  display: grid;
+  grid-template-columns: 76px 62px minmax(0, 1fr);
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid rgb(255 255 255 / 5%);
+}
+
+.tcba-debug__event time {
+  color: #718096;
+}
+
+.tcba-debug__event b {
+  color: #93a4bb;
+}
+
+.tcba-debug__event span {
+  overflow-wrap: anywhere;
+  color: #cbd5e1;
+}
+
+.tcba-debug__message {
+  min-width: 0;
+}
+
+.tcba-debug__message details {
+  margin-top: 4px;
+}
+
+.tcba-debug__message summary {
+  width: fit-content;
+  color: #91a7ff;
+  cursor: pointer;
+  user-select: none;
+}
+
+.tcba-debug__details {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 8px;
+  background: #0e1219;
+  border: 1px solid #30394a;
+  border-radius: 7px;
+}
+
+.tcba-debug__details a {
+  color: #91a7ff;
+}
+
+.tcba-debug__details code,
+.tcba-debug__details pre {
+  margin: 0;
+  overflow: auto;
+  color: #cbd5e1;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.tcba-debug__details pre {
+  max-height: 320px;
+  padding: 8px;
+  background: #090c11;
+  border-radius: 5px;
+}
+
+.tcba-debug__details small {
+  color: #8592a6;
+}
+
+.tcba-debug__event--success span {
+  color: #72d39a;
+}
+
+.tcba-debug__event--warning span {
+  color: #f1c76d;
+}
+
+.tcba-debug__event--error span {
+  color: #ff858d;
+}
+
+@media (max-width: 560px) {
+  .tcba-debug {
+    display: none;
+  }
+}
+
+@media (min-width: 561px) and (max-width: 1040px) {
+  .tcba-debug {
+    width: min(360px, calc(100vw - 552px));
+  }
+}

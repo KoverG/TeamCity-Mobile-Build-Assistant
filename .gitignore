@@ -59,6 +59,7 @@ publish/
 *.ipa
 
 # Local assistant and diagnostic attachments
+/AGENTS.md
 .codex/
 .agents/
 attachments/

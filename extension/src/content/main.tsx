@@ -4,7 +4,9 @@ import { DiagnosticConsole, DiagnosticRuntime, diagnosticStyles } from '@tcba/di
 import { createTeamCityService } from '../teamcity/TeamCityService'
 import { BrowserSessionTeamCityTransport } from '../teamcity/TeamCityTransport'
 import { App } from './App'
-import styles from './styles.css?inline'
+import panelStyles from './AssistantPanel.css?inline'
+import navTabStyles from './TeamCityNavTab.css?inline'
+import tokenStyles from './tokens.css?inline'
 
 const hostId = 'teamcity-mobile-build-assistant-root'
 
@@ -20,7 +22,12 @@ if (document.getElementById(hostId) === null) {
   const transport = new BrowserSessionTeamCityTransport(diagnostics.transportObserver)
   const service = diagnostics.decorateService(createTeamCityService(transport))
 
-  style.textContent = styles + (diagnostics.enabled ? diagnosticStyles : '')
+  style.textContent = [
+    tokenStyles,
+    navTabStyles,
+    panelStyles,
+    diagnostics.enabled ? diagnosticStyles : '',
+  ].join('\n')
   shadowRoot.append(style, appRoot)
   diagnostics.attachUi(shadowRoot)
 

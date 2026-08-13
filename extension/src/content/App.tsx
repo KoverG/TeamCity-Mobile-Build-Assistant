@@ -20,13 +20,18 @@ import {
   type RememberedSelection,
   type SelectionStorage,
 } from '../storage/SelectionStorage'
+import type { LauncherStorage } from '../storage/LauncherStorage'
+import { TeamCityNavTab } from './TeamCityNavTab'
 
 type LoadingOperation = 'catalog' | 'builds' | 'artifacts' | undefined
+
+const panelId = 'teamcity-mobile-build-assistant-panel'
 
 interface AppProps {
   service?: TeamCityService
   classifier?: BuildConfigurationClassifier
   selectionStorage?: SelectionStorage
+  launcherStorage?: LauncherStorage
   origin?: string
   auxiliaryPanel?: ReactNode
 }
@@ -139,6 +144,7 @@ export function App({
   service,
   classifier,
   selectionStorage,
+  launcherStorage,
   origin,
   auxiliaryPanel,
 }: AppProps) {
@@ -367,10 +373,16 @@ export function App({
   }
 
   return (
-    <aside className="tcba-shell" aria-label="TeamCity Mobile Build Assistant">
-      {isOpen && auxiliaryPanel}
-      {isOpen && (
-        <section className="tcba-panel" aria-live="polite">
+    <TeamCityNavTab
+      origin={runtimeOrigin}
+      panelId={panelId}
+      panelOpen={isOpen}
+      storage={launcherStorage}
+      auxiliaryPanel={auxiliaryPanel}
+      onTogglePanel={togglePanel}
+      onCollapse={() => setIsOpen(false)}
+    >
+      <section id={panelId} className="tcba-panel" aria-live="polite">
           <header className="tcba-panel__header">
             <div>
               <strong>Mobile Build Assistant</strong>
@@ -562,18 +574,7 @@ export function App({
 
           {actionMessage && <p className="tcba-action-message">{actionMessage}</p>}
           <p className="tcba-privacy">Используется текущая авторизованная сессия TeamCity.</p>
-        </section>
-      )}
-
-      <button
-        className="tcba-launcher"
-        type="button"
-        aria-expanded={isOpen}
-        aria-label={isOpen ? 'Закрыть Mobile Build Assistant' : 'Открыть Mobile Build Assistant'}
-        onClick={togglePanel}
-      >
-        TC
-      </button>
-    </aside>
+      </section>
+    </TeamCityNavTab>
   )
 }

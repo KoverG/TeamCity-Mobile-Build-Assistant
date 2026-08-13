@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TeamCity Mobile Build Assistant",
-  "version": "0.3.7",
+  "version": "0.4.0",
   "description": "Find mobile TeamCity artifacts and send protected links to Telegram.",
   "permissions": ["activeTab", "scripting", "storage"],
   "optional_host_permissions": ["https://*/*"],

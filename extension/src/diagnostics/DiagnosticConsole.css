@@ -1,5 +1,5 @@
 .tcba-debug {
-  width: min(460px, calc(100vw - 112px));
+  width: min(460px, max(320px, calc(var(--tcba-panel-stack-available, 100vw) - 452px)));
   height: min(620px, calc(100vh - 48px));
   display: grid;
   grid-template-rows: auto 1fr;
@@ -147,14 +147,8 @@
   color: #ff858d;
 }
 
-@media (max-width: 560px) {
+@media (max-width: 960px) {
   .tcba-debug {
     display: none;
-  }
-}
-
-@media (min-width: 561px) and (max-width: 1040px) {
-  .tcba-debug {
-    width: min(360px, calc(100vw - 552px));
   }
 }

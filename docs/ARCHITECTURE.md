@@ -2,7 +2,7 @@
 
 - Статус: согласованная архитектурная база
 - Дата фиксации: 2026-08-08
-- Последнее обновление: 2026-08-11
+- Последнее обновление: 2026-08-15 (версия 1.0.0)
 
 Связанные документы:
 
@@ -100,34 +100,29 @@ flowchart LR
 ### 4.1. Модули
 
 ```text
-extension/
-├── content-script/
-│   ├── TeamCityPageHost
-│   ├── ShadowDomRoot
-│   └── TeamCityPageIntegration
-├── ui/
-│   ├── selectors
-│   ├── build-list
-│   ├── artifact-state
-│   ├── onboarding
-│   └── telegram-pairing
+extension/src/
+├── content/
+│   ├── App.tsx                         # composition root панели
+│   ├── TeamCityNavTab.*                # независимый launcher-хлястик
+│   └── assistant/
+│       ├── useAssistantController.ts   # UI state и orchestration
+│       ├── AssistantPanel.tsx
+│       ├── PanelToolbar.tsx
+│       ├── Combobox.tsx
+│       ├── PlatformFilter.tsx
+│       └── BuildResults.tsx
 ├── teamcity/
-│   ├── TeamCityContext
-│   ├── TeamCityTransport
-│   ├── SessionProbe
-│   ├── CatalogLoader
-│   ├── BuildConfigurationClassifier
-│   ├── BuildFinder
-│   └── ArtifactResolver
-├── backend/
-│   └── TelegramGatewayClient
-├── browser/
-│   ├── BrowserStorage
-│   ├── BrowserPermissions
-│   ├── BrowserTabs
-│   └── BrowserRuntime
+│   ├── TeamCityTransport.ts
+│   ├── SessionProbe.ts
+│   ├── CatalogLoader.ts
+│   ├── BuildConfigurationClassifier.ts
+│   ├── BuildFinder.ts
+│   ├── BuildArtifactSearch.ts          # bounded 20/4 coordinator
+│   ├── ArtifactResolver.ts
+│   ├── restPath.ts                     # same-origin URL и REST namespace policy
+│   └── limits.ts                       # единая нормализация числовых лимитов
+├── diagnostics/                        # независимый diagnostic slice
 └── storage/
-    └── ExtensionSettings
 ```
 
 ### 4.2. Встраивание UI
@@ -142,10 +137,18 @@ Content script создаёт Shadow Root и перемещаемый launcher-�
 - `TeamCityNavTabVisual.tsx` содержит только SVG-визуал launcher;
 - `TeamCityNavTabGeometry.ts` является единым источником размеров launcher для визуала и drag-геометрии;
 - `TeamCityNavTab.css` содержит только геометрию, состояния и анимацию launcher, а также размещение panel stack относительно него;
-- `AssistantPanel.css` содержит только визуал основной функциональной панели и её controls;
-- `DiagnosticConsole.css` содержит только визуал диагностической панели.
+- `AssistantPanel.css` содержит геометрию и состояния контейнера основной панели;
+- `assistant/AssistantControls.css` содержит универсальные controls и toolbar;
+- `assistant/BuildResults.css` содержит список и карточки результатов;
+- `DiagnosticConsole.css` содержит только визуал диагностической панели и не вычисляет размеры через ширину основной панели.
 
-Размеры launcher передаются из `TeamCityNavTabGeometry.ts` в CSS custom properties, поэтому drag-геометрия и визуальный размер не дублируются. Граница между stylesheets защищена regression-тестом: селекторы launcher и основной панели не могут смешиваться или переопределять друг друга.
+Размеры launcher передаются из `TeamCityNavTabGeometry.ts` в CSS custom properties, поэтому drag-геометрия и визуальный размер не дублируются. Основная панель имеет desktop-размер 400×580 px и уменьшается по доступному viewport. Diagnostic-панель является соседним flex-элементом со своей геометрией; при узком viewport она скрывается по собственному media query. Граница между stylesheets защищена regression-тестом для launcher, assistant и diagnostics.
+
+Inter 400/500/600/700 для латиницы и кириллицы поставляется внутри Extension в WOFF2. Сетевой font provider не используется; системный stack остаётся fallback.
+
+`BuildArtifactSearch` получает агрегированный список последних успешных builds, ограничивает обработку 20 элементами и запускает не более четырёх `ArtifactResolver` одновременно. В presentation state попадают только результаты `Resolved` с одним кандидатом; порядок карточек соответствует порядку builds после сортировки.
+
+Клик по публичному номеру build передаёт в service worker только opaque `buildId`. Service worker повторно валидирует ID, формирует same-origin TeamCity URL из origin вкладки-источника и создаёт неактивную вкладку в том же окне. Произвольный URL из UI в этот контракт не принимается, текущая TeamCity-вкладка остаётся активной.
 
 DOM-интеграция TeamCity изолируется в `TeamCityPageIntegration`. В MVP она отвечает только за общий launcher. Во второй итерации в неё добавляется обнаружение строк builds и монтирование локальных кнопок.
 
@@ -186,7 +189,7 @@ Extension не запрашивает `chrome.cookies` без доказанно
 
 - `installationId`;
 - `rememberSelection`;
-- выбранные Project/OS/Environment;
+- выбранные Project/Platform/Environment, если запоминание уже разрешено пользователем;
 - нормализованное вертикальное положение, сторона viewport и compact-состояние launcher для текущего TeamCity origin;
 - `onboardingAcceptedVersion`;
 - device token, полученный после Telegram pairing;
@@ -194,7 +197,7 @@ Extension не запрашивает `chrome.cookies` без доказанно
 
 TeamCity cookie и Telegram Bot Token там отсутствуют.
 
-Project/OS/Environment хранятся отдельно для каждого нормализованного runtime TeamCity origin и только после явного включения checkbox запоминания. Переключение на другой origin не переносит tenant-specific selection между инсталляциями.
+Project/Platform/Environment хранятся отдельно для каждого нормализованного runtime TeamCity origin. В интерфейсе 1.0.0 checkbox не показывается: ранее сохранённое разрешение продолжает действовать, а без него выбор остаётся в памяти текущей UI-сессии. Переключение на другой origin не переносит tenant-specific selection между инсталляциями.
 
 ## 5. Backend
 

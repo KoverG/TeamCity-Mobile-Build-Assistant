@@ -9,6 +9,7 @@ $allowedHosts = @(
     'two.example.test',
     'backend.example.invalid',
     'json.schemastore.org',
+    'www.w3.org',
     'www.jetbrains.com',
     'jetbrains.com',
     't.me',

@@ -4,7 +4,8 @@ import { DiagnosticConsole, DiagnosticRuntime, diagnosticStyles } from '@tcba/di
 import { createTeamCityService } from '../teamcity/TeamCityService'
 import { BrowserSessionTeamCityTransport } from '../teamcity/TeamCityTransport'
 import { App } from './App'
-import panelStyles from './AssistantPanel.css?inline'
+import { fontStyles } from './assistant/fonts'
+import { assistantStyles } from './assistant/styles'
 import navTabStyles from './TeamCityNavTab.css?inline'
 import tokenStyles from './tokens.css?inline'
 
@@ -23,9 +24,10 @@ if (document.getElementById(hostId) === null) {
   const service = diagnostics.decorateService(createTeamCityService(transport))
 
   style.textContent = [
+    fontStyles,
     tokenStyles,
     navTabStyles,
-    panelStyles,
+    assistantStyles,
     diagnostics.enabled ? diagnosticStyles : '',
   ].join('\n')
   shadowRoot.append(style, appRoot)

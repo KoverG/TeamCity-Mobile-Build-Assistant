@@ -1,6 +1,9 @@
 .tcba-debug {
-  width: min(460px, max(320px, calc(var(--tcba-panel-stack-available, 100vw) - 452px)));
-  height: min(620px, calc(100vh - 48px));
+  width: min(460px, 42vw);
+  min-width: min(320px, 100%);
+  max-width: 100%;
+  height: min(580px, calc(100vh - 24px));
+  flex: 1 1 320px;
   display: grid;
   grid-template-rows: auto 1fr;
   overflow: hidden;

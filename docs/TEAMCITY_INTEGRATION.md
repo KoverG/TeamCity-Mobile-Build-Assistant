@@ -2,7 +2,7 @@
 
 - Статус: обезличенный контракт интеграции, обязательный для публичного repository
 - Дата исследования: 2026-08-08
-- Последнее обновление: 2026-08-11
+- Последнее обновление: 2026-08-15 (версия 1.0.0)
 
 Связанные документы:
 
@@ -21,7 +21,8 @@ TeamCity origin определяется во время работы из `wind
 - `TeamCityTransport` — безопасные read-only запросы в текущую инсталляцию;
 - `CatalogLoader` — проекты и build configurations;
 - `BuildConfigurationClassifier` — конфигурируемая классификация;
-- `BuildFinder` — finished/successful builds и ручной поиск;
+- `BuildFinder` — ограниченная загрузка finished/successful builds;
+- `BuildArtifactSearch` — суммарное ограничение builds и concurrency поиска artifacts;
 - `ArtifactResolver` — поиск APK/IPA в дереве artifacts.
 
 ## 2. Что подтверждено исследованием
@@ -75,13 +76,13 @@ TeamCityInstance
 ^(?<product>.+)_mobile_(?<os>android|ios)_(?<environment>dev|stage|prod)$
 ```
 
-Нераспознанная configuration не скрывается. UI показывает её как `Unclassified` и позволяет пользователю выбрать или локально сопоставить её. Неоднозначная classification блокирует автоматическое решение.
+Нераспознанная configuration сохраняется в доменном каталоге как `Unclassified`, но не участвует в автоматическом поиске версии 1.0.0. Будущая настройка локального сопоставления может включить её без изменения transport и resolver.
 
 Профиль хранится локально на устройстве либо во внешней runtime-конфигурации. В repository могут находиться только синтетические default profiles.
 
 ## 5. Получение builds
 
-Для выбранной build configuration загружаются только завершённые успешные builds из всех доступных branches.
+Для build configurations, соответствующих выбранным фильтрам, загружаются только завершённые успешные builds из всех доступных branches. Пустой Platform означает Android и iOS, обе выбранные платформы имеют ту же семантику; пустой Environment означает все распознанные environments.
 
 Концептуальный locator:
 
@@ -97,12 +98,14 @@ id,buildTypeId,number,status,state,branchName,defaultBranch,finishDate,webUrl
 
 Обязательные правила:
 
-- использовать pagination/`nextHref`;
+- использовать pagination/`nextHref`, пока не достигнут запрошенный предел;
 - не считать отсутствие `branchName` ошибкой;
 - явно показывать branch в UI;
 - сохранять server-provided build ID как opaque string;
-- ручной поиск build number выполняется в выбранной configuration;
-- не загружать artifact tree до выбора конкретного build.
+- загружать builds одновременно не более чем для четырёх build configurations;
+- после объединения и сортировки обрабатывать не более 20 последних builds суммарно;
+- запускать не более четырёх ArtifactResolver одновременно;
+- не выполнять поиск artifacts до явной команды пользователя.
 
 ## 6. Artifact API и доменная модель
 
@@ -122,25 +125,28 @@ ArtifactNode
 
 ## 7. Алгоритм ArtifactResolver
 
-После выбора build:
+Для каждого build из ограниченного списка:
 
 1. Выполнить один bulk GET `GET /app/rest/builds/id:<build-id>/artifacts`.
 2. Не задавать `basePath`, чтобы областью был artifact root.
-3. Использовать целевой locator `recursive:true,browseArchives:true,pattern:**/*.apk` для Android или `recursive:true,browseArchives:true,pattern:**/*.ipa` для iOS и минимальные fields `count,file(name,fullName,href,content(href),children(count,href))`; передавать `resolveParameters=false` и `logBuildUsage=false`. `**/` обязателен: TeamCity использует Ant-style wildcards, а `*.apk`/`*.ipa` охватывает только текущий уровень и не находит файл глубже в directory/archive. Полученный результат дополнительно фильтровать на клиенте без учёта регистра.
+3. Использовать целевой locator `recursive:true,browseArchives:true,pattern:**/*.apk` для Android или `recursive:true,browseArchives:true,pattern:**/*.ipa` для iOS и минимальные fields, включающие `name`, `fullName`, `size`, metadata/content/children href; передавать `resolveParameters=false` и `logBuildUsage=false`. `**/` обязателен: TeamCity использует Ant-style wildcards, а `*.apk`/`*.ipa` охватывает только текущий уровень и не находит файл глубже в directory/archive. Полученный результат дополнительно фильтровать на клиенте без учёта регистра.
 4. Считать candidate только конечный файл с расширением `.apk` или `.ipa` без учёта регистра.
 5. Для Android принимать только APK, для iOS — только IPA.
 6. Использовать только server-provided `contentHref`; не реконструировать download URL при наличии этого поля.
-7. Считать archive раскрытым bulk API, только если listing содержит его вложенные `!/` paths.
-8. Если bulk endpoint недоступен, вернул пустой результат либо обнаружен нераскрытый archive/container, запустить bounded concurrent metadata/children traversal от artifact root.
-9. Fallback дедуплицирует href/path и ограничивает depth, nodes, requests и concurrency. Каждый GET получает собственный timeout 30 секунд, а весь поиск ограничен отдельным общим `AbortController` timeout 120 секунд.
-10. `.nupkg`, `.zip` и directory являются контейнерами, а не конечными результатами; весь `.nupkg` для поиска в browser не скачивается.
-11. Вернуть `NotFound`, `Resolved` или `Ambiguous`.
+7. Перед copy/download разрешать только HTTP(S)-ссылку того же TeamCity origin; cross-origin и исполняемые схемы отклонять как `InvalidRequest`.
+8. Считать archive раскрытым bulk API, только если listing содержит его вложенные `!/` paths.
+9. Если bulk endpoint недоступен, вернул пустой результат либо обнаружен нераскрытый archive/container, запустить bounded concurrent metadata/children traversal от artifact root.
+10. Fallback дедуплицирует href/path и ограничивает depth, nodes, requests и concurrency. Каждый GET получает собственный timeout 30 секунд, а весь поиск ограничен отдельным общим `AbortController` timeout 120 секунд.
+11. `.nupkg`, `.zip` и directory являются контейнерами, а не конечными результатами; весь `.nupkg` для поиска в browser не скачивается.
+12. Вернуть `NotFound`, `Resolved` или `Ambiguous`.
 
 Результаты:
 
-- 0 candidates — build показывается, действия блокируются с объяснением;
-- 1 candidate — разрешены copy/open/send;
-- 2+ candidates — блокирующая ошибка конфигурации без автоматического выбора.
+- 0 candidates — build не включается в список карточек;
+- 1 candidate — build включается в список, доступны copy/download/select;
+- 2+ candidates — build не включается в список карточек, автоматический выбор запрещён.
+
+Если TeamCity не вернул `size`, карточка показывает `—`. Ошибка resolver отдельного build не создаёт карточку, если другие builds удалось проверить; если не завершилась ни одна проверка, общий поиск завершается безопасной ошибкой операции. Raw response и tenant data в product UI не выводятся.
 
 ## 8. Синтетические artifact-сценарии
 

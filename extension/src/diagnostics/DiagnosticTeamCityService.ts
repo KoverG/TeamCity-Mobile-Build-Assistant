@@ -29,14 +29,17 @@ export class DiagnosticTeamCityService implements TeamCityService {
     }
   }
 
-  public async loadBuilds(buildTypeIds: readonly string[]) {
+  public async loadBuilds(
+    buildTypeIds: readonly string[],
+    options?: Parameters<TeamCityService['loadBuilds']>[1],
+  ) {
     this.store.emit(
       'UI',
       'info',
       `Загрузка успешных builds: ${buildTypeIds.length} configurations.`,
     )
     try {
-      const result = await this.inner.loadBuilds(buildTypeIds)
+      const result = await this.inner.loadBuilds(buildTypeIds, options)
       this.store.emit('UI', 'success', `Получено builds: ${result.builds.length}.`)
       return result
     } catch (error) {
@@ -49,6 +52,7 @@ export class DiagnosticTeamCityService implements TeamCityService {
     buildId: string,
     buildTypeId: string,
     platform: MobilePlatform,
+    options?: Parameters<TeamCityService['resolveArtifact']>[3],
   ) {
     this.store.emit(
       'UI',
@@ -56,7 +60,7 @@ export class DiagnosticTeamCityService implements TeamCityService {
       `Поиск mobile artifact: ${platform === 'android' ? 'APK' : 'IPA'}.`,
     )
     try {
-      const result = await this.inner.resolveArtifact(buildId, buildTypeId, platform)
+      const result = await this.inner.resolveArtifact(buildId, buildTypeId, platform, options)
       this.store.emit(
         'UI',
         result.status === 'Resolved' ? 'success' : 'warning',

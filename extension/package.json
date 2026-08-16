@@ -1,7 +1,7 @@
 {
   "name": "teamcity-mobile-build-assistant-extension",
   "private": true,
-  "version": "0.4.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev:content": "vite build --watch --mode development --config vite.content.config.ts --configLoader native",
@@ -19,6 +19,7 @@
     "test:run": "vitest run --configLoader native"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.2.8",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },

@@ -14,6 +14,13 @@ describe('BuildFinder', () => {
     expect(locator).toContain('count:100')
   })
 
+  it('uses the default page size for a non-finite count', () => {
+    const path = createSuccessfulBuildsPath('Example_Mobile', Number.NaN)
+    const locator = new URLSearchParams(path.split('?')[1]).get('locator')
+
+    expect(locator).toContain('count:20')
+  })
+
   it('defensively excludes incompatible rows returned by TeamCity', async () => {
     const path = createSuccessfulBuildsPath('Example_Mobile')
     const client = new FakeTeamCityHttpClient(
@@ -70,5 +77,35 @@ describe('BuildFinder', () => {
 
     expect(result.builds.map(({ id }) => id)).toEqual(['1', '2'])
     expect(client.requestedPaths).toEqual([firstPath, secondPath])
+  })
+
+  it('stops at the requested build limit without following another page', async () => {
+    const firstPath = createSuccessfulBuildsPath('Synthetic_Mobile', 1)
+    const client = new FakeTeamCityHttpClient(
+      new Map([
+        [
+          firstPath,
+          {
+            build: [
+              {
+                id: 1,
+                buildTypeId: 'Synthetic_Mobile',
+                number: 'one',
+                status: 'SUCCESS',
+                state: 'finished',
+              },
+            ],
+            nextHref: '/app/rest/builds?page=2',
+          },
+        ],
+      ]),
+    )
+
+    const result = await loadSuccessfulBuilds(client, 'Synthetic_Mobile', {
+      maximumBuilds: 1,
+    })
+
+    expect(result.builds.map(({ id }) => id)).toEqual(['1'])
+    expect(client.requestedPaths).toEqual([firstPath])
   })
 })

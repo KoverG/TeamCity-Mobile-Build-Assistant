@@ -1,0 +1,328 @@
+.tcba-results {
+  display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
+  grid-template-rows: 31px minmax(0, 1fr) 42px;
+  margin-top: 4px;
+}
+
+.tcba-results__header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  color: var(--tcba-color-label);
+  font-size: 13px;
+}
+
+.tcba-results__header > span {
+  margin-right: auto;
+}
+
+.tcba-results__header .tcba-icon-button {
+  width: 30px;
+  height: 30px;
+  flex-basis: 30px;
+}
+
+.tcba-results__header svg {
+  width: 20px;
+  height: 20px;
+}
+
+.tcba-results__viewport {
+  position: relative;
+  min-height: 0;
+}
+
+.tcba-results__list {
+  display: grid;
+  height: 100%;
+  align-content: start;
+  gap: 5px;
+  padding-right: 8px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.tcba-results__scrollbar {
+  position: absolute;
+  z-index: 4;
+  top: 2px;
+  right: 0;
+}
+
+.tcba-results__fade {
+  position: absolute;
+  z-index: 3;
+  right: 8px;
+  left: 0;
+  height: 28px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease;
+}
+
+.tcba-results__fade--visible {
+  opacity: 1;
+}
+
+.tcba-results__fade--top {
+  top: 0;
+  background: linear-gradient(#ffffff 5%, rgb(255 255 255 / 0%));
+}
+
+.tcba-results__fade--bottom {
+  bottom: 0;
+  background: linear-gradient(rgb(255 255 255 / 0%), #ffffff 95%);
+}
+
+.tcba-build-card {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  height: 80px;
+  grid-template-columns: 40px minmax(0, 1fr) 72px;
+  align-items: center;
+  padding: 6px;
+  color: var(--tcba-color-text);
+  background: var(--tcba-color-surface);
+  border: 1px solid var(--tcba-color-border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.tcba-build-card__select {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: inherit;
+  cursor: pointer;
+}
+
+.tcba-build-card--selected {
+  border: 2px solid var(--tcba-color-primary);
+  padding: 5px;
+}
+
+.tcba-build-card__platform {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 28px;
+  height: 52px;
+  align-self: center;
+  grid-template-rows: 18px 18px 16px;
+  align-items: center;
+  justify-items: center;
+  color: var(--tcba-color-disabled);
+  pointer-events: none;
+}
+
+.tcba-build-card__platform svg {
+  grid-row: 1;
+  width: 28px;
+  height: 28px;
+}
+
+.tcba-build-card__platform small {
+  grid-row: 2;
+  color: var(--tcba-color-text);
+  font-size: 14px;
+  line-height: 18px;
+}
+
+.tcba-build-card__content {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  min-width: 0;
+  height: 52px;
+  grid-template-rows: 18px 18px 16px;
+  align-items: center;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 18px;
+  pointer-events: none;
+}
+
+.tcba-build-card__content strong,
+.tcba-build-card__content > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tcba-build-card__content strong {
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.tcba-build-card__number {
+  position: relative;
+  z-index: 2;
+  padding: 0;
+  color: var(--tcba-color-primary);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  line-height: inherit;
+  pointer-events: auto;
+  text-decoration: none;
+  transition: color 150ms ease;
+}
+
+.tcba-build-card__number:hover {
+  color: var(--tcba-color-primary-icon-hover);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.tcba-build-card__content time {
+  color: var(--tcba-color-secondary);
+  font-size: 14px;
+  line-height: 16px;
+}
+
+.tcba-build-card__actions {
+  position: relative;
+  z-index: 2;
+  display: block;
+  width: 100%;
+  height: 52px;
+  min-width: 0;
+  align-self: center;
+}
+
+.tcba-build-card__actions > span {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  display: flex;
+  align-items: center;
+  transform: translateY(-50%);
+}
+
+.tcba-build-card__actions .tcba-icon-button {
+  width: 32px;
+  height: 40px;
+  flex-basis: 32px;
+  padding: 3px;
+}
+
+.tcba-build-card__actions .tcba-icon-button svg {
+  width: 27px;
+  height: 27px;
+  stroke-width: 2.2;
+}
+
+.tcba-build-card__actions > small {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  font-size: 9px;
+  line-height: 12px;
+  white-space: nowrap;
+}
+
+.tcba-results__empty {
+  margin: 22px 8px;
+  color: var(--tcba-color-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.tcba-results__footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  align-items: end;
+  padding-top: 4px;
+}
+
+.tcba-action-button {
+  display: inline-flex;
+  min-width: 0;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 8px;
+  overflow: hidden;
+  color: #ffffff;
+  background: var(--tcba-color-primary);
+  border: 1px solid var(--tcba-color-primary);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tcba-action-button svg {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+}
+
+.tcba-action-button--secondary {
+  color: var(--tcba-color-text);
+  background: var(--tcba-color-surface);
+  border-color: var(--tcba-color-border);
+}
+
+.tcba-action-button:disabled {
+  color: var(--tcba-color-disabled);
+  cursor: default;
+}
+
+.tcba-action-button[aria-disabled="true"] {
+  cursor: default;
+}
+
+.tcba-action-button:hover:not(.tcba-action-button--secondary):not(:disabled):not([aria-disabled="true"]) {
+  background: var(--tcba-color-primary-hover);
+  border-color: var(--tcba-color-primary-hover);
+}
+
+.tcba-action-button--secondary:hover:not(:disabled):not([aria-disabled="true"]) {
+  background: var(--tcba-color-neutral-button-hover);
+  border-color: var(--tcba-color-border);
+}
+
+.tcba-action-button:focus-visible,
+.tcba-build-card__number:focus-visible,
+.tcba-build-card__select:focus-visible {
+  outline: 3px solid var(--tcba-color-focus);
+  outline-offset: 2px;
+}
+
+@media (max-width: 330px) {
+  .tcba-build-card {
+    grid-template-columns: 30px minmax(0, 1fr) 36px;
+  }
+
+  .tcba-build-card__actions > span {
+    display: grid;
+  }
+
+  .tcba-results__footer {
+    grid-template-columns: 1fr;
+  }
+
+  .tcba-results {
+    grid-template-rows: 31px minmax(0, 1fr) 86px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tcba-results__fade {
+    transition: none;
+  }
+}

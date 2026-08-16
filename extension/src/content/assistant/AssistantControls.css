@@ -1,0 +1,472 @@
+.tcba-toolbar {
+  position: relative;
+  display: flex;
+  min-height: 44px;
+  flex: 0 0 44px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tcba-toolbar__handle {
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  width: 64px;
+  height: 6px;
+  background: var(--tcba-color-primary);
+  border-radius: 99px;
+  transform: translateX(-50%);
+}
+
+.tcba-toolbar__logo {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+}
+
+.tcba-toolbar__logo svg {
+  display: block;
+  width: 26px;
+  height: 26px;
+}
+
+.tcba-toolbar__actions {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+}
+
+.tcba-toolbar__extras {
+  position: relative;
+  z-index: 1;
+  width: 4px;
+  height: 32px;
+  flex: 0 0 auto;
+  clip-path: inset(0 0 -32px 0);
+  pointer-events: none;
+  transition: width 360ms cubic-bezier(.22, .8, .24, 1);
+}
+
+.tcba-toolbar__extras--open {
+  width: 112px;
+  pointer-events: auto;
+}
+
+.tcba-toolbar__extras-track {
+  position: absolute;
+  top: 0;
+  left: 4px;
+  display: flex;
+  width: 104px;
+  gap: 4px;
+  opacity: 0;
+  transform: scale(.96);
+  transform-origin: right center;
+  transition:
+    opacity 90ms ease 240ms,
+    transform 360ms cubic-bezier(.22, .8, .24, 1);
+}
+
+.tcba-toolbar__extras--open .tcba-toolbar__extras-track {
+  opacity: 1;
+  transform: scale(1);
+  transition:
+    opacity 140ms ease 30ms,
+    transform 360ms cubic-bezier(.22, .8, .24, 1);
+}
+
+.tcba-toolbar__settings,
+.tcba-toolbar__close {
+  position: relative;
+  z-index: 3;
+}
+
+.tcba-toolbar__close {
+  margin-left: 4px;
+}
+
+.tcba-icon-button {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  padding: 4px;
+  place-items: center;
+  color: var(--tcba-color-text);
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: color 150ms ease, background-color 150ms ease, opacity 150ms ease;
+}
+
+.tcba-icon-button svg {
+  width: 24px;
+  height: 24px;
+}
+
+.tcba-icon-button--primary {
+  color: var(--tcba-color-primary);
+}
+
+.tcba-icon-button--muted,
+.tcba-icon-button:disabled {
+  color: var(--tcba-color-disabled);
+  cursor: default;
+}
+
+.tcba-icon-button--primary:disabled[aria-busy="true"] {
+  color: var(--tcba-color-primary);
+}
+
+.tcba-icon-button:hover:not(:disabled):not([aria-disabled="true"]) {
+  color: var(--tcba-color-primary-icon-hover);
+}
+
+.tcba-icon-button[aria-disabled="true"] {
+  cursor: default;
+}
+
+.tcba-toolbar__settings svg {
+  transition: transform 360ms cubic-bezier(.2, .8, .2, 1);
+}
+
+.tcba-icon--settings-open {
+  transform: rotate(180deg);
+}
+
+.tcba-icon--spinning {
+  animation: tcba-spin 750ms linear infinite reverse;
+}
+
+.tcba-icon-button--refresh:active:not(:disabled) svg {
+  animation: tcba-spin 750ms linear infinite reverse;
+}
+
+.tcba-field-label {
+  display: block;
+  margin: 0 0 3px;
+  color: var(--tcba-color-label);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+.tcba-combobox {
+  --tcba-combobox-option-height: 30px;
+  position: relative;
+  z-index: 3;
+}
+
+.tcba-combobox--open {
+  z-index: 8;
+}
+
+.tcba-combobox__trigger {
+  display: flex;
+  width: 100%;
+  height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px 6px 13px;
+  color: var(--tcba-color-text);
+  background: var(--tcba-color-surface);
+  border: 1px solid var(--tcba-color-border);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  text-align: left;
+}
+
+.tcba-combobox__trigger:disabled {
+  color: var(--tcba-color-disabled);
+  cursor: default;
+}
+
+.tcba-combobox__trigger:hover:not(:disabled) {
+  background: var(--tcba-color-neutral-button-hover);
+}
+
+.tcba-combobox__placeholder {
+  color: var(--tcba-color-disabled);
+}
+
+.tcba-combobox__chevron {
+  width: 19px;
+  height: 19px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: var(--tcba-color-label);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  transition: transform 160ms ease;
+}
+
+.tcba-combobox--open .tcba-combobox__chevron {
+  transform: rotate(180deg);
+}
+
+.tcba-combobox__list {
+  position: absolute;
+  z-index: 9;
+  top: calc(100% - 1px);
+  left: 0;
+  width: 100%;
+  max-height: calc(6 * var(--tcba-combobox-option-height) + 2px);
+  margin: 0;
+  padding: 0 25px 0 7px;
+  overflow: auto;
+  color: var(--tcba-color-text);
+  background: #f0f0f0;
+  border: 1px solid var(--tcba-color-border);
+  border-top: 0;
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 7px 13px rgb(0 0 0 / 10%);
+  font-size: 14px;
+  list-style: none;
+}
+
+.tcba-combobox__scrollbar {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 1px);
+  right: 6px;
+}
+
+.tcba-scroll-viewport {
+  scrollbar-width: none;
+}
+
+.tcba-scroll-viewport::-webkit-scrollbar {
+  display: none;
+}
+
+.tcba-scrollbar {
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.tcba-scrollbar__thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  background: #cfcfcf;
+  border-radius: 99px;
+}
+
+.tcba-combobox--open .tcba-combobox__trigger {
+  border-radius: 8px 8px 0 0;
+}
+
+.tcba-combobox__option {
+  position: relative;
+  display: flex;
+  height: var(--tcba-combobox-option-height);
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  cursor: pointer;
+}
+
+.tcba-combobox__option::before,
+.tcba-combobox__option:not(:last-child)::after {
+  position: absolute;
+  pointer-events: none;
+  content: '';
+}
+
+.tcba-combobox__option::before {
+  z-index: 0;
+  inset: 3px 0 4px;
+  background: rgb(0 0 0 / 10%);
+  border-radius: 8px;
+  opacity: 0;
+}
+
+.tcba-combobox__option:not(:last-child)::after {
+  right: 1px;
+  bottom: 0;
+  left: 8px;
+  height: 1px;
+  background: var(--tcba-color-border);
+}
+
+.tcba-combobox__option:hover::before,
+.tcba-combobox__option--active::before {
+  opacity: 1;
+}
+
+.tcba-combobox__option-label {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tcba-combobox__option-check {
+  position: relative;
+  z-index: 1;
+  width: 22px;
+  height: 18px;
+  flex: 0 0 22px;
+  color: var(--tcba-color-primary);
+}
+
+.tcba-platform {
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+.tcba-platform__options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.tcba-platform__options button {
+  display: grid;
+  height: 40px;
+  place-items: center;
+  padding: 5px;
+  color: var(--tcba-color-text);
+  background: var(--tcba-color-surface);
+  border: 1px solid var(--tcba-color-border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.tcba-platform__options button[aria-pressed="true"] {
+  color: var(--tcba-color-text);
+  border-color: var(--tcba-color-primary);
+}
+
+.tcba-platform__options button:hover:not(:disabled) {
+  color: var(--tcba-color-neutral-icon-hover);
+  background: var(--tcba-color-neutral-button-hover);
+}
+
+.tcba-platform__options button:disabled {
+  color: var(--tcba-color-disabled);
+  cursor: default;
+}
+
+.tcba-platform__options svg {
+  width: 28px;
+  height: 28px;
+}
+
+.tcba-theme-menu {
+  position: relative;
+  width: 32px;
+  height: 32px;
+}
+
+.tcba-theme-menu::before,
+.tcba-theme-menu::after {
+  position: absolute;
+  z-index: 0;
+  left: 2px;
+  width: 28px;
+  pointer-events: none;
+  content: '';
+  opacity: 0;
+  transition:
+    height 280ms cubic-bezier(.22, .8, .24, 1),
+    opacity 180ms ease;
+}
+
+.tcba-theme-menu::before {
+  top: 2px;
+  height: 28px;
+  background: rgb(0 0 0 / 10%);
+  border-radius: 10px;
+}
+
+.tcba-theme-menu::after {
+  top: 28px;
+  left: 7px;
+  width: 17px;
+  height: 1px;
+  background: rgb(0 0 0 / 10%);
+}
+
+.tcba-theme-menu--open::before {
+  height: 57px;
+  opacity: 1;
+}
+
+.tcba-theme-menu--open::after {
+  opacity: 1;
+  transition-delay: 110ms;
+}
+
+.tcba-theme-menu > .tcba-icon-button {
+  position: relative;
+  z-index: 2;
+}
+
+.tcba-theme-menu__alternate {
+  position: absolute;
+  z-index: 1;
+  top: 31px;
+  left: 2px;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  padding: 4px;
+  place-items: center;
+  color: var(--tcba-color-primary);
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  cursor: default;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-27px) scale(.82);
+  transition:
+    opacity 160ms ease,
+    transform 300ms cubic-bezier(.22, .8, .24, 1);
+}
+
+.tcba-theme-menu--open .tcba-theme-menu__alternate {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.tcba-theme-menu__alternate svg {
+  width: 19px;
+  height: 19px;
+}
+
+.tcba-icon-button:focus-visible,
+.tcba-combobox__trigger:focus-visible,
+.tcba-platform__options button:focus-visible,
+.tcba-theme-menu__alternate:focus-visible {
+  outline: 3px solid var(--tcba-color-focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tcba-icon-button,
+  .tcba-toolbar__extras,
+  .tcba-toolbar__extras-track,
+  .tcba-toolbar__settings svg,
+  .tcba-theme-menu::before,
+  .tcba-theme-menu::after,
+  .tcba-theme-menu__alternate,
+  .tcba-combobox__chevron,
+  .tcba-platform__options button,
+  .tcba-icon--settings-open,
+  .tcba-icon--spinning {
+    transition: none;
+    animation: none;
+  }
+}

@@ -1,8 +1,11 @@
 import {
+  isOpenTeamCityBuildRequest,
   isTeamCityGetRequest,
   type TeamCityRawResponse,
   type TeamCityTransportKind,
 } from '../teamcity/contracts'
+import { normalizeTeamCityRestPath } from '../teamcity/restPath'
+import { openTeamCityBuildTab } from './openTeamCityBuildTab'
 
 const contentScriptId = 'teamcity-mobile-build-assistant'
 const maximumResponseCharacters = 4_000_000
@@ -25,19 +28,6 @@ function getOriginPattern(rawUrl: string): string {
   }
 
   return `${url.origin}/*`
-}
-
-function normalizeRestPath(path: string): string {
-  if (
-    !path.startsWith('/app/rest') ||
-    path.includes('://') ||
-    path.includes('#') ||
-    path.includes('\\')
-  ) {
-    throw new Error('Invalid TeamCity REST path.')
-  }
-
-  return path
 }
 
 function isLoginPath(rawUrl: string): boolean {
@@ -140,11 +130,12 @@ async function fetchFromMainWorld(
         const timeout = window.setTimeout(() => controller.abort(), requestTimeoutMs)
 
         try {
+          const requestUrl = new URL(requestPath, window.location.origin)
           if (
-            !requestPath.startsWith('/app/rest') ||
-            requestPath.includes('://') ||
-            requestPath.includes('#') ||
-            requestPath.includes('\\')
+            requestUrl.origin !== window.location.origin ||
+            requestUrl.hash.length > 0 ||
+            (requestUrl.pathname !== '/app/rest' &&
+              !requestUrl.pathname.startsWith('/app/rest/'))
           ) {
             return {
               ...createPageFailure(),
@@ -152,7 +143,7 @@ async function fetchFromMainWorld(
             }
           }
 
-          const response = await fetch(new URL(requestPath, window.location.origin), {
+          const response = await fetch(requestUrl, {
             method: 'GET',
             credentials: 'same-origin',
             redirect: 'follow',
@@ -215,7 +206,7 @@ async function executeTeamCityGet(
   let normalizedPath: string
 
   try {
-    normalizedPath = normalizeRestPath(path)
+    normalizedPath = normalizeTeamCityRestPath(path)
   } catch {
     return createFailure('service-worker', 'invalid-request')
   }
@@ -315,6 +306,13 @@ chrome.action.onClicked.addListener(async (tab) => {
 })
 
 chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
+  if (isOpenTeamCityBuildRequest(message)) {
+    void openTeamCityBuildTab(message.buildId, sender)
+      .then(sendResponse)
+      .catch(() => sendResponse({ ok: false, error: 'open-failed' }))
+    return true
+  }
+
   if (!isTeamCityGetRequest(message)) {
     return false
   }

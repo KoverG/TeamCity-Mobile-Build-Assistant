@@ -292,8 +292,15 @@
   top: 0;
   left: calc(100% + 12px);
   display: flex;
+  width: max-content;
+  max-width: var(--tcba-panel-stack-available, calc(100vw - 112px));
+  min-width: 0;
   align-items: flex-start;
   gap: 12px;
+}
+
+.tcba-panel-stack > * {
+  min-width: 0;
 }
 
 .tcba-shell--lower .tcba-panel-stack {

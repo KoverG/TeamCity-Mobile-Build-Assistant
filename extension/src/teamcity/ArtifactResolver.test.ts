@@ -14,7 +14,7 @@ import type {
 
 function metadataPath(href: string): string {
   const fields =
-    'name,fullName,href,content(href),children(count,href,file(name,fullName,href,content(href),children(count,href)))'
+    'name,fullName,size,href,content(href),children(count,href,file(name,fullName,size,href,content(href),children(count,href)))'
   const url = new URL(href, window.location.origin)
   url.searchParams.set('fields', fields)
   return `${url.pathname}${url.search}`
@@ -31,7 +31,7 @@ describe('resolveMobileArtifact', () => {
       'recursive:true,browseArchives:true,pattern:**/*.apk',
     )
     expect(url.searchParams.get('fields')).toBe(
-      'count,file(name,fullName,href,content(href),children(count,href))',
+      'count,file(name,fullName,size,href,content(href),children(count,href))',
     )
     expect(url.searchParams.get('resolveParameters')).toBe('false')
     expect(url.searchParams.get('logBuildUsage')).toBe('false')
@@ -56,6 +56,7 @@ describe('resolveMobileArtifact', () => {
               {
                 name: 'mobile.ApK',
                 fullName: 'output/mobile.ApK',
+                size: '136314880',
                 content: { href: '/repository/download/synthetic/mobile.ApK' },
               },
             ],
@@ -72,6 +73,7 @@ describe('resolveMobileArtifact', () => {
         name: 'mobile.ApK',
         fullName: 'output/mobile.ApK',
         contentHref: '/repository/download/synthetic/mobile.ApK',
+        size: 136314880,
       },
     ])
     expect(result.diagnostics).toMatchObject({ strategy: 'bulk', requestCount: 1 })
@@ -277,6 +279,28 @@ describe('resolveMobileArtifact', () => {
 
     expect(result.status).toBe('NotFound')
     expect(result.diagnostics.requestCount).toBe(2)
+  })
+
+  it('falls back to finite safety limits for non-finite numeric options', async () => {
+    const bulkPath = createArtifactBulkPath('313', 'android')
+    const rootPath = createArtifactRootPath('313')
+    const client = new FakeTeamCityHttpClient(
+      new Map([
+        [bulkPath, { file: [] }],
+        [rootPath, { file: [{ name: 'notes.txt', fullName: 'notes.txt' }] }],
+      ]),
+    )
+
+    const result = await resolveMobileArtifact(client, '313', 'android', {
+      timeoutMs: Number.NaN,
+      requestTimeoutMs: Number.NaN,
+      fallbackConcurrency: Number.NaN,
+      maximumFallbackRequests: Number.NaN,
+    })
+
+    expect(result.status).toBe('NotFound')
+    expect(client.requestedPaths).toEqual([bulkPath, rootPath])
+    expect(client.requestedTimeouts).toEqual([30_000, 30_000])
   })
 
   it('marks two target files as Ambiguous without selecting either one', async () => {

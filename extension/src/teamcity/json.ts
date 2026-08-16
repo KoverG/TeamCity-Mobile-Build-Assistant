@@ -22,6 +22,16 @@ export function readBoolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined
 }
 
+export function readNonNegativeNumber(value: unknown): number | undefined {
+  const parsed = typeof value === 'number'
+    ? value
+    : typeof value === 'string' && value.trim().length > 0
+      ? Number(value)
+      : Number.NaN
+
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined
+}
+
 export function readArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : []
 }

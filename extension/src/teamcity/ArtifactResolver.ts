@@ -1,5 +1,6 @@
 import type { TeamCityTransportKind } from './contracts'
-import { asRecord, readArray, readString } from './json'
+import { asRecord, readArray, readNonNegativeNumber, readString } from './json'
+import { boundedInteger } from './limits'
 import { assertOpaqueId, toRestPath } from './restPath'
 import { TeamCityError } from './TeamCityError'
 import type { TeamCityHttpClient } from './TeamCityTransport'
@@ -10,6 +11,7 @@ export interface ArtifactCandidate {
   name: string
   fullName: string
   contentHref: string
+  size?: number
 }
 
 export interface ArtifactResolutionDiagnostics {
@@ -38,6 +40,7 @@ export interface ArtifactResolverOptions {
 interface ArtifactNode {
   name: string
   fullName: string
+  size?: number
   metadataHref?: string
   contentHref?: string
   childrenHref?: string
@@ -49,10 +52,10 @@ interface QueueItem {
   depth: number
 }
 
-const bulkArtifactFields = 'count,file(name,fullName,href,content(href),children(count,href))'
-const fallbackArtifactFields = 'file(name,fullName,href,content(href),children(count,href))'
+const bulkArtifactFields = 'count,file(name,fullName,size,href,content(href),children(count,href))'
+const fallbackArtifactFields = 'file(name,fullName,size,href,content(href),children(count,href))'
 const artifactMetadataFields =
-  'name,fullName,href,content(href),children(count,href,file(name,fullName,href,content(href),children(count,href)))'
+  'name,fullName,size,href,content(href),children(count,href,file(name,fullName,size,href,content(href),children(count,href)))'
 const maximumDepth = 8
 const maximumNodes = 5_000
 const defaultOverallTimeoutMs = 120_000
@@ -78,6 +81,7 @@ function parseArtifactNode(value: unknown): ArtifactNode | undefined {
   return {
     name,
     fullName,
+    size: readNonNegativeNumber(record.size),
     metadataHref: readString(record.href),
     contentHref: content === undefined ? undefined : readString(content.href),
     childrenHref: children === undefined ? undefined : readString(children.href),
@@ -198,13 +202,17 @@ export async function resolveMobileArtifact(
   options: ArtifactResolverOptions = {},
 ): Promise<ArtifactResolution> {
   const controller = new AbortController()
-  const overallTimeoutMs = Math.max(
+  const overallTimeoutMs = boundedInteger(
+    options.timeoutMs,
+    defaultOverallTimeoutMs,
     1,
-    Math.trunc(options.timeoutMs ?? defaultOverallTimeoutMs),
+    defaultOverallTimeoutMs,
   )
-  const requestTimeoutMs = Math.max(
+  const requestTimeoutMs = boundedInteger(
+    options.requestTimeoutMs,
+    defaultRequestTimeoutMs,
     1,
-    Math.trunc(options.requestTimeoutMs ?? defaultRequestTimeoutMs),
+    defaultRequestTimeoutMs,
   )
   const timeout = setTimeout(() => controller.abort(), overallTimeoutMs)
   const abortFromCaller = () => controller.abort()
@@ -238,6 +246,7 @@ export async function resolveMobileArtifact(
           name: node.name,
           fullName: node.fullName,
           contentHref: node.contentHref,
+          size: node.size,
         })
       }
     }
@@ -260,6 +269,7 @@ export async function resolveMobileArtifact(
           name: node.name,
           fullName: node.fullName,
           contentHref,
+          size: node.size,
         })
       }
     }
@@ -327,12 +337,16 @@ export async function resolveMobileArtifact(
       queue.push({ path: createArtifactRootPath(buildId), depth: 0 })
     }
 
-    const concurrency = Math.min(
-      Math.max(Math.trunc(options.fallbackConcurrency ?? defaultFallbackConcurrency), 1),
+    const concurrency = boundedInteger(
+      options.fallbackConcurrency,
+      defaultFallbackConcurrency,
+      1,
       8,
     )
-    const maximumRequests = Math.min(
-      Math.max(Math.trunc(options.maximumFallbackRequests ?? defaultMaximumFallbackRequests), 1),
+    const maximumRequests = boundedInteger(
+      options.maximumFallbackRequests,
+      defaultMaximumFallbackRequests,
+      1,
       100,
     )
     let fallbackRequests = 0

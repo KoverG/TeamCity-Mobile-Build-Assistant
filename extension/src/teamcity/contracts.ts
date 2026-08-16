@@ -6,6 +6,16 @@ export interface TeamCityGetRequest {
   timeoutMs?: number
 }
 
+export interface OpenTeamCityBuildRequest {
+  type: 'teamcity:open-build'
+  buildId: string
+}
+
+export interface OpenTeamCityBuildResponse {
+  ok: boolean
+  error?: 'invalid-request' | 'tab-unavailable' | 'open-failed'
+}
+
 export interface TeamCityRawResponse {
   ok: boolean
   status: number
@@ -29,6 +39,30 @@ export function isTeamCityGetRequest(value: unknown): value is TeamCityGetReques
     typeof request.path === 'string' &&
     (request.timeoutMs === undefined ||
       (typeof request.timeoutMs === 'number' && Number.isFinite(request.timeoutMs)))
+  )
+}
+
+export function isOpenTeamCityBuildRequest(value: unknown): value is OpenTeamCityBuildRequest {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const request = value as Partial<OpenTeamCityBuildRequest>
+  return request.type === 'teamcity:open-build' && typeof request.buildId === 'string'
+}
+
+export function isOpenTeamCityBuildResponse(value: unknown): value is OpenTeamCityBuildResponse {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const response = value as Partial<OpenTeamCityBuildResponse>
+  return (
+    typeof response.ok === 'boolean' &&
+    (response.error === undefined ||
+      response.error === 'invalid-request' ||
+      response.error === 'tab-unavailable' ||
+      response.error === 'open-failed')
   )
 }
 

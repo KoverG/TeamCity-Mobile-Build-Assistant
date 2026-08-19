@@ -75,6 +75,7 @@ describe('searchBuildArtifacts', () => {
     const result = await searchBuildArtifacts(service, configurations, {
       maximumBuilds: 50,
       concurrency: 8,
+      query: { mode: 'task', value: 'synthetic-1' },
     })
 
     expect(result.checkedBuilds).toBe(20)
@@ -83,7 +84,10 @@ describe('searchBuildArtifacts', () => {
     expect(service.resolveArtifact).toHaveBeenCalledTimes(20)
     expect(service.loadBuilds).toHaveBeenCalledWith(
       ['Synthetic_Android', 'Synthetic_iOS'],
-      expect.objectContaining({ maximumBuilds: 20 }),
+      expect.objectContaining({
+        maximumBuilds: 20,
+        query: { mode: 'task', value: 'synthetic-1' },
+      }),
     )
     expect(maximumConcurrency).toBeLessThanOrEqual(4)
   })

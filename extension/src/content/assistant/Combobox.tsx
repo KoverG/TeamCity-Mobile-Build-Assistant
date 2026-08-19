@@ -150,14 +150,14 @@ export function Combobox<T extends string>({
       {visibleOpen && (
         <ul
           ref={listRef}
-          className="tcba-combobox__list tcba-scroll-viewport"
+          className="tcba-field-dropdown tcba-combobox__list tcba-scroll-viewport"
           id={`${id}-listbox`}
           role="listbox"
         >
           {options.map((option, index) => (
             <li
               id={`${id}-option-${index}`}
-              className={`tcba-combobox__option${keyboardHighlight && index === activeIndex ? ' tcba-combobox__option--active' : ''}`}
+              className={`tcba-field-option${keyboardHighlight && index === activeIndex ? ' tcba-field-option--active' : ''}`}
               key={option.value}
               role="option"
               aria-selected={option.value === value}
@@ -167,7 +167,7 @@ export function Combobox<T extends string>({
                 setKeyboardHighlight(false)
               }}
             >
-              <span className="tcba-combobox__option-label">{option.label}</span>
+              <span className="tcba-field-option__label">{option.label}</span>
               {option.value === value && (
                 <CheckIcon className="tcba-combobox__option-check" />
               )}

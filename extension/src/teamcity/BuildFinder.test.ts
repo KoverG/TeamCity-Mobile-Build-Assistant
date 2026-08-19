@@ -21,6 +21,42 @@ describe('BuildFinder', () => {
     expect(locator).toContain('count:20')
   })
 
+  it('uses an encoded case-insensitive partial branch condition for task search', () => {
+    const path = createSuccessfulBuildsPath('Example_Mobile', 20, {
+      mode: 'task',
+      value: 'TASK-123',
+    })
+    const locator = new URLSearchParams(path.split('?')[1]).get('locator')
+
+    expect(locator).toContain(
+      'branch:(name:(value:($base64:VEFTSy0xMjM),matchType:contains,ignoreCase:true),default:any)',
+    )
+    expect(locator).not.toContain('number:')
+  })
+
+  it('keeps a numeric task fragment as a partial branch search', () => {
+    const path = createSuccessfulBuildsPath('Example_Mobile', 20, {
+      mode: 'task',
+      value: '123',
+    })
+    const locator = new URLSearchParams(path.split('?')[1]).get('locator')
+
+    expect(locator).toContain(
+      'branch:(name:(value:($base64:MTIz),matchType:contains,ignoreCase:true),default:any)',
+    )
+  })
+
+  it('uses an encoded exact public build number while allowing every branch', () => {
+    const path = createSuccessfulBuildsPath('Example_Mobile', 20, {
+      mode: 'build',
+      value: 'release:42,1',
+    })
+    const locator = new URLSearchParams(path.split('?')[1]).get('locator')
+
+    expect(locator).toContain('number:($base64:cmVsZWFzZTo0Miwx)')
+    expect(locator).toContain('branch:default:any')
+  })
+
   it('defensively excludes incompatible rows returned by TeamCity', async () => {
     const path = createSuccessfulBuildsPath('Example_Mobile')
     const client = new FakeTeamCityHttpClient(

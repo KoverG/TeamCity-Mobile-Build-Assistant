@@ -30,6 +30,7 @@ function sameMetrics(left: ScrollMetrics, right: ScrollMetrics): boolean {
 export function useScrollMetrics<T extends HTMLElement>(
   viewportRef: RefObject<T | null>,
   refreshKey: unknown,
+  trackInset = 4,
 ): ScrollMetrics {
   const [metrics, setMetrics] = useState(emptyMetrics)
 
@@ -44,7 +45,7 @@ export function useScrollMetrics<T extends HTMLElement>(
     function update() {
       const clientHeight = visibleViewport.clientHeight
       const scrollHeight = visibleViewport.scrollHeight
-      const trackHeight = Math.max(0, clientHeight - 4)
+      const trackHeight = Math.max(0, clientHeight - trackInset)
       const visible = scrollHeight > clientHeight + 1
       const thumbHeight = visible
         ? Math.min(trackHeight, Math.max(18, trackHeight * clientHeight / scrollHeight))
@@ -72,7 +73,7 @@ export function useScrollMetrics<T extends HTMLElement>(
       visibleViewport.removeEventListener('scroll', update)
       observer?.disconnect()
     }
-  }, [refreshKey, viewportRef])
+  }, [refreshKey, trackInset, viewportRef])
 
   return metrics
 }

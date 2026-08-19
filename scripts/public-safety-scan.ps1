@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$excludedSegments = @('node_modules', 'bin', 'obj', 'dist', 'dist-production', 'dist-diagnostic', '.git', '.idea', '.codex', '.agents')
+$excludedSegments = @('node_modules', 'bin', 'obj', 'dist', 'dist-production', 'dist-diagnostic', '.git', '.idea', '.codex', '.agents', 'Makets')
 $allowedHosts = @(
     'localhost',
     'teamcity.example.test',

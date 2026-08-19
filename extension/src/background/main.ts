@@ -1,10 +1,12 @@
 import {
+  isOpenTeamCityArtifactRequest,
   isOpenTeamCityBuildRequest,
   isTeamCityGetRequest,
   type TeamCityRawResponse,
   type TeamCityTransportKind,
 } from '../teamcity/contracts'
 import { normalizeTeamCityRestPath } from '../teamcity/restPath'
+import { openTeamCityArtifactTab } from './openTeamCityArtifactTab'
 import { openTeamCityBuildTab } from './openTeamCityBuildTab'
 
 const contentScriptId = 'teamcity-mobile-build-assistant'
@@ -306,6 +308,13 @@ chrome.action.onClicked.addListener(async (tab) => {
 })
 
 chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
+  if (isOpenTeamCityArtifactRequest(message)) {
+    void openTeamCityArtifactTab(message.contentHref, sender)
+      .then(sendResponse)
+      .catch(() => sendResponse({ ok: false, error: 'open-failed' }))
+    return true
+  }
+
   if (isOpenTeamCityBuildRequest(message)) {
     void openTeamCityBuildTab(message.buildId, sender)
       .then(sendResponse)

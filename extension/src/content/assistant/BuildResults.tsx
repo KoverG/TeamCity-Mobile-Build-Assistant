@@ -1,39 +1,49 @@
-import { useRef } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
+import { contentAssetUrl } from '../assetUrl'
 import type { BuildArtifactMatch } from '../../teamcity/BuildArtifactSearch'
+import helloMascotAsset from './assets/Main_Hello.png'
+import waitingMascotAsset from './assets/Main_Waiting.png'
+import notFoundMascotAsset from './assets/Main_Not_Found.png'
+import waitingShadowAsset from './assets/Ellipse Shadow.svg'
+import waitingLoaderAsset from './assets/blocks-shuffle-4.svg'
 import {
   AndroidIcon,
   AppleIcon,
+  CheckIcon,
   CopyIcon,
   DownloadIcon,
-  RefreshIcon,
-  SearchIcon,
+  ResultsGhostIcon,
+  SortBuildsIcon,
   TelegramIcon,
 } from './Icons'
 import { IconButton } from './IconButton'
 import { OverlayScrollbar } from './ScrollArea'
 import { useScrollMetrics } from './useScrollMetrics'
+import { findEventPathElement } from './eventPath'
+
+const helloMascotUrl = contentAssetUrl(helloMascotAsset)
+const waitingMascotUrl = contentAssetUrl(waitingMascotAsset)
+const notFoundMascotUrl = contentAssetUrl(notFoundMascotAsset)
+const waitingShadowUrl = contentAssetUrl(waitingShadowAsset)
+const waitingLoaderUrl = contentAssetUrl(waitingLoaderAsset)
+
+export interface AssistantToast {
+  message: string
+  tone: 'success' | 'error'
+}
 
 interface BuildResultsProps {
+  status: 'idle' | 'loading' | 'ready' | 'error'
+  hasSearched: boolean
+  errorMessage?: string
   matches: readonly BuildArtifactMatch[]
   selectedBuildIds: ReadonlySet<string>
-  onRefresh(): void
+  toast?: AssistantToast
+  onRetry(): void
   onToggle(buildId: string): void
   onCopy(matches: readonly BuildArtifactMatch[]): void
   onDownload(match: BuildArtifactMatch): void
   onOpenBuild(match: BuildArtifactMatch): void
-}
-
-function resultLabel(count: number): string {
-  const modulo100 = count % 100
-  const modulo10 = count % 10
-  const noun = modulo100 >= 11 && modulo100 <= 14
-    ? 'билдов'
-    : modulo10 === 1
-      ? 'билд'
-      : modulo10 >= 2 && modulo10 <= 4
-        ? 'билда'
-        : 'билдов'
-  return `Сборки: ${count} ${noun}`
 }
 
 function formatFinishDate(value: string | undefined): string {
@@ -53,6 +63,9 @@ function formatSize(size: number | undefined): string {
 function BuildCard({
   match,
   selected,
+  revealed,
+  onReveal,
+  onClose,
   onToggle,
   onCopy,
   onDownload,
@@ -60,143 +73,270 @@ function BuildCard({
 }: {
   match: BuildArtifactMatch
   selected: boolean
+  revealed: boolean
+  onReveal(): void
+  onClose(): void
   onToggle(): void
   onCopy(): void
   onDownload(): void
   onOpenBuild(): void
 }) {
+  function revealFromContextMenu(event: MouseEvent<HTMLElement>) {
+    event.preventDefault()
+    event.stopPropagation()
+    if (revealed) {
+      onClose()
+    } else {
+      onReveal()
+    }
+  }
+
+  function handleContextKey(event: KeyboardEvent<HTMLButtonElement>) {
+    if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+      event.preventDefault()
+      if (revealed) {
+        onClose()
+      } else {
+        onReveal()
+      }
+    } else if (event.key === 'Escape' && revealed) {
+      event.preventDefault()
+      onClose()
+    }
+  }
+
   return (
-    <article
-      className={`tcba-build-card${selected ? ' tcba-build-card--selected' : ''}`}
+    <div
+      className={`tcba-build-row${revealed ? ' tcba-build-row--revealed' : ''}`}
+      data-build-id={match.build.id}
     >
-      <button
-        className="tcba-build-card__select"
-        type="button"
-        aria-label={`${selected ? 'Исключить' : 'Выбрать'} сборку #${match.build.number}`}
-        aria-pressed={selected}
-        onClick={onToggle}
-      />
-      <span className="tcba-build-card__platform" aria-hidden="true">
-        {match.configuration.platform === 'android'
-          ? <AndroidIcon />
-          : <AppleIcon />}
-        <small>{match.configuration.platform === 'android' ? 'apk' : 'ipa'}</small>
-      </span>
-      <span className="tcba-build-card__content">
-        <strong>{match.configuration.name}</strong>
-        <span>
-          <button
-            className="tcba-build-card__number"
-            type="button"
-            aria-label={`Открыть билд #${match.build.number} в TeamCity`}
-            onClick={onOpenBuild}
-          >
-            #{match.build.number}
-          </button>
-          {' | '}
-          {match.build.branchName ?? (match.build.defaultBranch ? 'default branch' : 'branch —')}
+      <div className="tcba-build-row__download" aria-hidden={!revealed}>
+        <IconButton
+          label={`Скачать сборку #${match.build.number}`}
+          tone="primary"
+          tabIndex={revealed ? 0 : -1}
+          onClick={onDownload}
+        >
+          <DownloadIcon />
+        </IconButton>
+        <small>{formatSize(match.artifact.size)}</small>
+      </div>
+      <article
+        className={`tcba-build-card${selected ? ' tcba-build-card--selected' : ''}`}
+        onContextMenu={revealFromContextMenu}
+      >
+        <button
+          className="tcba-build-card__select"
+          type="button"
+          aria-label={`${selected ? 'Исключить' : 'Выбрать'} сборку #${match.build.number}`}
+          aria-pressed={selected}
+          onClick={onToggle}
+          onKeyDown={handleContextKey}
+        />
+        <span className="tcba-build-card__platform" aria-hidden="true">
+          {match.configuration.platform === 'android' ? <AndroidIcon /> : <AppleIcon />}
+          <small>{match.configuration.platform === 'android' ? 'apk' : 'ipa'}</small>
         </span>
-        <time dateTime={match.build.finishDate}>{formatFinishDate(match.build.finishDate)}</time>
-      </span>
-      <span className="tcba-build-card__actions">
-        <span>
-          <IconButton
-            label={`Скопировать ссылку на сборку #${match.build.number}`}
-            tone="primary"
-            onClick={onCopy}
-          >
+        <span className="tcba-build-card__content">
+          <strong>{match.configuration.name}</strong>
+          <span>
+            <button
+              className="tcba-build-card__number"
+              type="button"
+              aria-label={`Открыть билд #${match.build.number} в TeamCity`}
+              onClick={onOpenBuild}
+            >
+              #{match.build.number}
+            </button>
+            {' | '}
+            {match.build.branchName ?? (match.build.defaultBranch ? 'default branch' : 'branch —')}
+          </span>
+          <time dateTime={match.build.finishDate}>{formatFinishDate(match.build.finishDate)}</time>
+        </span>
+        <span className="tcba-build-card__copy">
+          <IconButton label={`Скопировать ссылку на сборку #${match.build.number}`} tone="primary" onClick={onCopy}>
             <CopyIcon />
           </IconButton>
-          <IconButton
-            label={`Скачать сборку #${match.build.number}`}
-            tone="primary"
-            onClick={onDownload}
-          >
-            <DownloadIcon />
-          </IconButton>
         </span>
-        <small>{formatSize(match.artifact.size)}</small>
+      </article>
+    </div>
+  )
+}
+
+function MascotState({ type }: { type: 'hello' | 'waiting' | 'not-found' }) {
+  if (type === 'waiting') {
+    return (
+      <div className="tcba-results-state tcba-results-state--waiting" role="status">
+        <div className="tcba-results-state__waiting-visual">
+          <img className="tcba-results-state__mascot" src={waitingMascotUrl} alt="Маскот ищет сборки" />
+          <img className="tcba-results-state__shadow" src={waitingShadowUrl} alt="" />
+        </div>
+        <strong>Ищем сборки...</strong>
+        <span>Пожалуйста подождите</span>
+        <img className="tcba-results-state__loader" src={waitingLoaderUrl} alt="" />
+      </div>
+    )
+  }
+  const notFound = type === 'not-found'
+  return (
+    <div className={`tcba-results-state tcba-results-state--${type}`}>
+      <img
+        className="tcba-results-state__mascot"
+        src={notFound ? notFoundMascotUrl : helloMascotUrl}
+        alt=""
+      />
+      <strong>{notFound ? 'Не удалось найти сборки' : 'Здесь пока ничего нет'}</strong>
+      <span>
+        {notFound
+          ? <>Мы ничего не нашли по вашему запросу.<br />Измените параметры и попробуйте снова</>
+          : <>Выберите параметры слева<br />и найдем для вас сборки</>}
       </span>
-    </article>
+    </div>
   )
 }
 
 export function BuildResults({
+  status,
+  hasSearched,
+  errorMessage,
   matches,
   selectedBuildIds,
-  onRefresh,
+  toast,
+  onRetry,
   onToggle,
   onCopy,
   onDownload,
   onOpenBuild,
 }: BuildResultsProps) {
   const listRef = useRef<HTMLDivElement>(null)
-  const scroll = useScrollMetrics(listRef, matches)
-  const selectedMatches = matches.filter((match) => selectedBuildIds.has(match.build.id))
+  const [revealedBuildId, setRevealedBuildId] = useState<string>()
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest')
+  const sortedMatches = useMemo(() => [...matches].sort((left, right) => {
+    const comparison = (left.build.finishDate ?? '').localeCompare(right.build.finishDate ?? '')
+    return sortOrder === 'newest' ? -comparison : comparison
+  }), [matches, sortOrder])
+  const scroll = useScrollMetrics(listRef, sortedMatches, 28)
+  const selectedMatches = sortedMatches.filter((match) => selectedBuildIds.has(match.build.id))
+
+  useEffect(() => {
+    if (revealedBuildId === undefined) {
+      return
+    }
+    function closeOnOutsidePointer(event: PointerEvent) {
+      const row = findEventPathElement(event, 'tcba-build-row')
+      if (row?.getAttribute('data-build-id') !== revealedBuildId) {
+        setRevealedBuildId(undefined)
+      }
+    }
+    function closeOnEscape(event: globalThis.KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setRevealedBuildId(undefined)
+      }
+    }
+    document.addEventListener('pointerdown', closeOnOutsidePointer)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePointer)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [revealedBuildId])
+
+  const showCards = status === 'ready' && matches.length > 0
+  const headerText = status === 'loading'
+      ? 'Поиск...'
+      : status === 'error'
+        ? 'Ошибка поиска'
+        : 'Сборки не найдены'
 
   return (
-    <section className="tcba-results" aria-label="Найденные сборки">
-      <header className="tcba-results__header">
-        <span>{resultLabel(matches.length)}</span>
-        <IconButton
-          className="tcba-icon-button--refresh"
-          label="Повторить поиск сборок"
-          tone="primary"
-          onClick={onRefresh}
-        >
-          <RefreshIcon />
-        </IconButton>
-        <IconButton label="Поиск в результатах — скоро" tone="primary" decorative>
-          <SearchIcon />
-        </IconButton>
+    <section className={`tcba-results${showCards ? ' tcba-results--with-cards' : ''}`} aria-label="Результаты поиска сборок">
+      {toast !== undefined && (
+        <div className={`tcba-toast tcba-toast--${toast.tone}`} role="status">
+          {toast.tone === 'success' && <CheckIcon />}
+          <span>{toast.message}</span>
+        </div>
+      )}
+      <header className={`tcba-results__header${showCards ? ' tcba-results__header--with-results' : ''}`}>
+        <ResultsGhostIcon />
+        {showCards ? (
+          <span className="tcba-results__count">
+            <strong>Найдены сборки:</strong>
+            {' '}
+            <b>{matches.length}</b>
+          </span>
+        ) : (
+          <span>{headerText}</span>
+        )}
+        {showCards && (
+          <IconButton
+            label={sortOrder === 'newest' ? 'Показать сначала старые сборки' : 'Показать сначала новые сборки'}
+            title={sortOrder === 'newest' ? 'Сначала новые' : 'Сначала старые'}
+            tone="primary"
+            onClick={() => setSortOrder((current) => current === 'newest' ? 'oldest' : 'newest')}
+          >
+            <SortBuildsIcon className={sortOrder === 'oldest' ? 'tcba-sort-icon--oldest' : undefined} />
+          </IconButton>
+        )}
       </header>
 
-      <div className="tcba-results__viewport">
-        <div
-          className={`tcba-results__fade tcba-results__fade--top${scroll.overflowStart ? ' tcba-results__fade--visible' : ''}`}
-          aria-hidden="true"
-        />
-        <div className="tcba-results__list tcba-scroll-viewport" ref={listRef}>
-          {matches.map((match) => (
-            <BuildCard
-              key={match.build.id}
-              match={match}
-              selected={selectedBuildIds.has(match.build.id)}
-              onToggle={() => onToggle(match.build.id)}
-              onCopy={() => onCopy([match])}
-              onDownload={() => onDownload(match)}
-              onOpenBuild={() => onOpenBuild(match)}
-            />
-          ))}
-          {matches.length === 0 && (
-            <p className="tcba-results__empty">Сборки с одним mobile artifact не найдены.</p>
-          )}
+      {status === 'error' ? (
+        <div className="tcba-results-error" role="alert">
+          <strong>Не удалось выполнить поиск</strong>
+          <span>{errorMessage}</span>
+          <button type="button" onClick={onRetry}>Повторить</button>
         </div>
-        <OverlayScrollbar
-          className="tcba-results__scrollbar"
-          metrics={scroll}
-          thumbWidth={7}
-        />
-        <div
-          className={`tcba-results__fade tcba-results__fade--bottom${scroll.overflowEnd ? ' tcba-results__fade--visible' : ''}`}
-          aria-hidden="true"
-        />
-      </div>
+      ) : status === 'loading' ? (
+        <MascotState type="waiting" />
+      ) : !hasSearched ? (
+        <MascotState type="hello" />
+      ) : !showCards ? (
+        <MascotState type="not-found" />
+      ) : (
+        <>
+          <div className="tcba-results__viewport">
+            <div className={`tcba-results__fade tcba-results__fade--top${scroll.overflowStart ? ' tcba-results__fade--visible' : ''}`} aria-hidden="true" />
+            <div
+              className="tcba-results__list tcba-scroll-viewport"
+              ref={listRef}
+              onScroll={() => setRevealedBuildId(undefined)}
+            >
+              {sortedMatches.map((match) => (
+                <BuildCard
+                  key={match.build.id}
+                  match={match}
+                  selected={selectedBuildIds.has(match.build.id)}
+                  revealed={revealedBuildId === match.build.id}
+                  onReveal={() => setRevealedBuildId(match.build.id)}
+                  onClose={() => setRevealedBuildId(undefined)}
+                  onToggle={() => onToggle(match.build.id)}
+                  onCopy={() => onCopy([match])}
+                  onDownload={() => {
+                    setRevealedBuildId(undefined)
+                    onDownload(match)
+                  }}
+                  onOpenBuild={() => onOpenBuild(match)}
+                />
+              ))}
+            </div>
+            <OverlayScrollbar className="tcba-results__scrollbar" metrics={scroll} thumbWidth={7} />
+            <div className={`tcba-results__fade tcba-results__fade--bottom${scroll.overflowEnd ? ' tcba-results__fade--visible' : ''}`} aria-hidden="true" />
+          </div>
 
-      <footer className="tcba-results__footer">
-        <button
-          className="tcba-action-button tcba-action-button--secondary"
-          type="button"
-          disabled={matches.length === 0}
-          onClick={() => onCopy(selectedMatches.length > 0 ? selectedMatches : matches)}
-        >
-          {selectedMatches.length > 0 ? 'Копировать выбранное' : 'Копировать все'}
-        </button>
-        <button className="tcba-action-button" type="button" aria-disabled="true" tabIndex={-1}>
-          <TelegramIcon />
-          Отправить в ТГ
-        </button>
-      </footer>
+          <footer className="tcba-results__footer">
+            <button
+              className="tcba-action-button tcba-action-button--secondary"
+              type="button"
+              onClick={() => onCopy(selectedMatches.length > 0 ? selectedMatches : sortedMatches)}
+            >
+              {selectedMatches.length > 0 ? 'Копировать' : 'Копировать все'}
+            </button>
+            <button className="tcba-action-button" type="button" aria-disabled="true" tabIndex={-1}>
+              <TelegramIcon />
+              Отправить в ТГ
+            </button>
+          </footer>
+        </>
+      )}
     </section>
   )
 }

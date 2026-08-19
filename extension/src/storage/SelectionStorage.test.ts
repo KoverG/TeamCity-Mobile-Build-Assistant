@@ -44,4 +44,20 @@ describe('ChromeSelectionStorage', () => {
     await expect(storage.load('https://one.example.test')).resolves.toBeUndefined()
     await expect(storage.load('https://two.example.test')).resolves.toEqual(selection)
   })
+
+  it('keeps the last applied search mode and separate query drafts', async () => {
+    const storage = new ChromeSelectionStorage()
+    const selection = {
+      projectId: 'Synthetic',
+      os: 'Unclassified',
+      environment: 'Production',
+      searchMode: 'build',
+      taskQuery: 'TASK-123',
+      buildQuery: '42.17',
+    } as const
+
+    await storage.save('https://one.example.test', selection)
+
+    await expect(storage.load('https://one.example.test')).resolves.toEqual(selection)
+  })
 })

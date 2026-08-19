@@ -5,6 +5,11 @@ import { assertOpaqueId } from './restPath'
 import { toRestPath } from './restPath'
 import { TeamCityError } from './TeamCityError'
 import type { TeamCityHttpClient } from './TeamCityTransport'
+import {
+  maximumBuildSearchQueryLength,
+  normalizeBuildSearchQuery,
+  type BuildSearchQuery,
+} from './BuildSearch'
 
 export interface TeamCityBuild {
   id: string
@@ -22,6 +27,7 @@ export interface BuildsResult {
 
 export interface BuildLoadOptions {
   maximumBuilds?: number
+  query?: BuildSearchQuery
   signal?: AbortSignal
   requestTimeoutMs?: number
 }
@@ -56,21 +62,55 @@ function parseBuild(value: unknown): TeamCityBuild | undefined {
   }
 }
 
-export function createSuccessfulBuildsPath(buildTypeId: string, count = 20): string {
+function toBase64Url(value: string): string {
+  const bytes = new TextEncoder().encode(value)
+  let binary = ''
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte)
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+}
+
+function searchLocator(query: BuildSearchQuery | undefined): string[] {
+  if (query === undefined) {
+    return ['branch:default:any']
+  }
+
+  const normalizedValue = normalizeBuildSearchQuery(query.value)
+  if (normalizedValue.length === 0) {
+    return ['branch:default:any']
+  }
+  if (query.value.trim().length > maximumBuildSearchQueryLength) {
+    throw new TeamCityError('InvalidRequest', 'Build search query is too long.')
+  }
+
+  const encodedValue = `($base64:${toBase64Url(normalizedValue)})`
+  return query.mode === 'task'
+    ? [
+        `branch:(name:(value:${encodedValue},matchType:contains,ignoreCase:true),default:any)`,
+      ]
+    : [`number:${encodedValue}`, 'branch:default:any']
+}
+
+export function createSuccessfulBuildsPath(
+  buildTypeId: string,
+  count = 20,
+  searchQuery?: BuildSearchQuery,
+): string {
   const safeBuildTypeId = assertOpaqueId(buildTypeId, 'buildTypeId')
   const safeCount = boundedInteger(count, 20, 1, 100)
   const locator = [
     `buildType:(id:${safeBuildTypeId})`,
     'state:finished',
     'status:SUCCESS',
-    'branch:default:any',
+    ...searchLocator(searchQuery),
     `count:${safeCount}`,
   ].join(',')
   const fields =
     'count,build(id,buildTypeId,number,status,state,branchName,defaultBranch,finishDate),nextHref'
-  const query = new URLSearchParams({ locator, fields })
+  const urlQuery = new URLSearchParams({ locator, fields })
 
-  return `/app/rest/builds?${query.toString()}`
+  return `/app/rest/builds?${urlQuery.toString()}`
 }
 
 export async function loadSuccessfulBuilds(
@@ -86,7 +126,11 @@ export async function loadSuccessfulBuilds(
   const firstPageCount = options.maximumBuilds === undefined
     ? 20
     : Math.min(maximumBuilds, 100)
-  let nextPath: string | undefined = createSuccessfulBuildsPath(buildTypeId, firstPageCount)
+  let nextPath: string | undefined = createSuccessfulBuildsPath(
+    buildTypeId,
+    firstPageCount,
+    options.query,
+  )
   let transport: TeamCityTransportKind = 'service-worker'
 
   let page = 0

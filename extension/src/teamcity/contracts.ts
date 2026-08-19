@@ -16,6 +16,13 @@ export interface OpenTeamCityBuildResponse {
   error?: 'invalid-request' | 'tab-unavailable' | 'open-failed'
 }
 
+export interface OpenTeamCityArtifactRequest {
+  type: 'teamcity:open-artifact'
+  contentHref: string
+}
+
+export type OpenTeamCityArtifactResponse = OpenTeamCityBuildResponse
+
 export interface TeamCityRawResponse {
   ok: boolean
   status: number
@@ -51,6 +58,15 @@ export function isOpenTeamCityBuildRequest(value: unknown): value is OpenTeamCit
   return request.type === 'teamcity:open-build' && typeof request.buildId === 'string'
 }
 
+export function isOpenTeamCityArtifactRequest(value: unknown): value is OpenTeamCityArtifactRequest {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const request = value as Partial<OpenTeamCityArtifactRequest>
+  return request.type === 'teamcity:open-artifact' && typeof request.contentHref === 'string'
+}
+
 export function isOpenTeamCityBuildResponse(value: unknown): value is OpenTeamCityBuildResponse {
   if (typeof value !== 'object' || value === null) {
     return false
@@ -65,6 +81,8 @@ export function isOpenTeamCityBuildResponse(value: unknown): value is OpenTeamCi
       response.error === 'open-failed')
   )
 }
+
+export const isOpenTeamCityArtifactResponse = isOpenTeamCityBuildResponse
 
 export function isTeamCityRawResponse(value: unknown): value is TeamCityRawResponse {
   if (typeof value !== 'object' || value === null) {

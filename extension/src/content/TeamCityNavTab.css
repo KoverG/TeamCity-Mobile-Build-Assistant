@@ -3,6 +3,12 @@
   --tcba-tab-color-hover: #d91d46;
   --tcba-motion-fast: 180ms cubic-bezier(0.2, 0, 0, 1);
   --tcba-motion-liquid: 420ms cubic-bezier(0.22, 1, 0.36, 1);
+  --tcba-workspace-direction: ltr;
+  --tcba-results-hidden-direction: -1;
+  --tcba-results-handle-scale: 1;
+  --tcba-results-visible-center-offset: 29.5px;
+  --tcba-build-reveal-offset: -70px;
+  --tcba-panel-vertical-space: calc(100vh - var(--tcba-shell-top) - 12px);
   position: fixed;
   z-index: 2147483647;
   top: var(--tcba-shell-top, 45vh);
@@ -17,6 +23,18 @@
     width var(--tcba-motion-liquid),
     height var(--tcba-motion-liquid),
     opacity var(--tcba-motion-fast);
+}
+
+.tcba-shell--right {
+  --tcba-workspace-direction: rtl;
+  --tcba-results-hidden-direction: 1;
+  --tcba-results-handle-scale: -1;
+  --tcba-results-visible-center-offset: -29.5px;
+  --tcba-build-reveal-offset: 70px;
+}
+
+.tcba-shell--lower {
+  --tcba-panel-vertical-space: calc(var(--tcba-shell-top) + var(--tcba-tab-expanded-height) - 12px);
 }
 
 .tcba-shell--anchored {

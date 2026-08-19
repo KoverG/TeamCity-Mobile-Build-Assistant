@@ -4,6 +4,7 @@ import type { TeamCityService } from './TeamCityService'
 import { TeamCityError } from './TeamCityError'
 import type { TeamCityTransportKind } from './contracts'
 import { boundedInteger } from './limits'
+import type { BuildSearchQuery } from './BuildSearch'
 
 export interface BuildArtifactSearchConfiguration {
   id: string
@@ -26,6 +27,7 @@ export interface BuildArtifactSearchResult {
 export interface BuildArtifactSearchOptions {
   maximumBuilds?: number
   concurrency?: number
+  query?: BuildSearchQuery
   timeoutMs?: number
   requestTimeoutMs?: number
   signal?: AbortSignal
@@ -69,6 +71,7 @@ export async function searchBuildArtifacts(
   try {
     const buildResult = await service.loadBuilds([...uniqueConfigurations.keys()], {
       maximumBuilds,
+      query: options.query,
       requestTimeoutMs,
       signal: controller.signal,
     })

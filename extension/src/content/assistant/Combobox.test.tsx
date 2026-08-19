@@ -28,8 +28,8 @@ describe('Combobox', () => {
     const list = screen.getByRole('listbox')
     expect(list).not.toHaveAttribute('style')
     expect(list).toHaveClass('tcba-scroll-viewport')
-    expect(container.querySelectorAll('.tcba-combobox__option')).toHaveLength(7)
-    expect(container.querySelector('.tcba-combobox__option:last-child')).toHaveTextContent('Project-7')
+    expect(container.querySelectorAll('.tcba-field-option')).toHaveLength(7)
+    expect(container.querySelector('.tcba-field-option:last-child')).toHaveTextContent('Project-7')
   })
 
   it('keeps the chevron in the trigger and shows the mockup check only in the selected option', () => {

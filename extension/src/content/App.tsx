@@ -2,8 +2,12 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { BuildConfigurationClassifier } from '../teamcity/BuildConfigurationClassifier'
 import { createTeamCityService, type TeamCityService } from '../teamcity/TeamCityService'
 import { ChromeSelectionStorage, type SelectionStorage } from '../storage/SelectionStorage'
+import {
+  ChromeSearchHistoryStorage,
+  type SearchHistoryStorage,
+} from '../storage/SearchHistoryStorage'
 import type { LauncherStorage } from '../storage/LauncherStorage'
-import { AssistantPanel } from './assistant/AssistantPanel'
+import { AssistantWorkspace } from './assistant/AssistantWorkspace'
 import { useAssistantController } from './assistant/useAssistantController'
 import { TeamCityNavTab } from './TeamCityNavTab'
 
@@ -13,6 +17,7 @@ interface AppProps {
   service?: TeamCityService
   classifier?: BuildConfigurationClassifier
   selectionStorage?: SelectionStorage
+  searchHistoryStorage?: SearchHistoryStorage
   launcherStorage?: LauncherStorage
   origin?: string
   auxiliaryPanel?: ReactNode
@@ -22,6 +27,7 @@ export function App({
   service,
   classifier,
   selectionStorage,
+  searchHistoryStorage,
   launcherStorage,
   origin,
   auxiliaryPanel,
@@ -35,22 +41,34 @@ export function App({
     () => selectionStorage ?? new ChromeSelectionStorage(),
     [selectionStorage],
   )
+  const historyStorage = useMemo(
+    () => searchHistoryStorage ?? new ChromeSearchHistoryStorage(),
+    [searchHistoryStorage],
+  )
   const runtimeOrigin = origin ?? window.location.origin
   const [isOpen, setIsOpen] = useState(false)
   const controller = useAssistantController({
     service: teamCity,
     classifier: catalogClassifier,
     storage,
+    historyStorage,
     origin: runtimeOrigin,
   })
 
+  function closePanel() {
+    controller.discardDraftChanges()
+    setIsOpen(false)
+  }
+
   function togglePanel() {
     if (isOpen) {
-      setIsOpen(false)
+      closePanel()
       return
     }
     setIsOpen(true)
-    void controller.loadCatalog()
+    if (controller.state.catalogStatus === 'idle') {
+      void controller.loadCatalog()
+    }
   }
 
   return (
@@ -61,13 +79,13 @@ export function App({
       storage={launcherStorage}
       auxiliaryPanel={auxiliaryPanel}
       onTogglePanel={togglePanel}
-      onCollapse={() => setIsOpen(false)}
+      onCollapse={closePanel}
     >
-      <AssistantPanel
+      <AssistantWorkspace
         id={panelId}
         origin={runtimeOrigin}
         controller={controller}
-        onClose={() => setIsOpen(false)}
+        onClose={closePanel}
       />
     </TeamCityNavTab>
   )

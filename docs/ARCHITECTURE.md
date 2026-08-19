@@ -106,7 +106,9 @@ extension/src/
 │   ├── TeamCityNavTab.*                # независимый launcher-хлястик
 │   └── assistant/
 │       ├── useAssistantController.ts   # UI state и orchestration
+│       ├── AssistantWorkspace.tsx      # main/result drawer и общие действия
 │       ├── AssistantPanel.tsx
+│       ├── SearchField.tsx
 │       ├── PanelToolbar.tsx
 │       ├── Combobox.tsx
 │       ├── PlatformFilter.tsx
@@ -117,12 +119,15 @@ extension/src/
 │   ├── CatalogLoader.ts
 │   ├── BuildConfigurationClassifier.ts
 │   ├── BuildFinder.ts
+│   ├── BuildSearch.ts                  # режим и нормализация запроса
 │   ├── BuildArtifactSearch.ts          # bounded 20/4 coordinator
 │   ├── ArtifactResolver.ts
 │   ├── restPath.ts                     # same-origin URL и REST namespace policy
 │   └── limits.ts                       # единая нормализация числовых лимитов
 ├── diagnostics/                        # независимый diagnostic slice
 └── storage/
+    ├── SelectionStorage.ts
+    └── SearchHistoryStorage.ts
 ```
 
 ### 4.2. Встраивание UI
@@ -142,13 +147,17 @@ Content script создаёт Shadow Root и перемещаемый launcher-�
 - `assistant/BuildResults.css` содержит список и карточки результатов;
 - `DiagnosticConsole.css` содержит только визуал диагностической панели и не вычисляет размеры через ширину основной панели.
 
-Размеры launcher передаются из `TeamCityNavTabGeometry.ts` в CSS custom properties, поэтому drag-геометрия и визуальный размер не дублируются. Основная панель имеет desktop-размер 400×580 px и уменьшается по доступному viewport. Diagnostic-панель является соседним flex-элементом со своей геометрией; при узком viewport она скрывается по собственному media query. Граница между stylesheets защищена regression-тестом для launcher, assistant и diagnostics.
+Размеры launcher передаются из `TeamCityNavTabGeometry.ts` в CSS custom properties, поэтому drag-геометрия и визуальный размер не дублируются. `AssistantWorkspace` объединяет основную панель 300×480 px и поверхность результатов 400×450 px: 59 px поверхности скрыты под основной панелью, а видимое расширение составляет 341 px. Направление раскрытия задаётся launcher через CSS custom properties и зеркально меняется на правой стороне. Хлястик результатов поддерживает клик и горизонтальный pointer drag; drawer и сдвиг карточки используют общий duration/easing. Diagnostic-панель остаётся соседним flex-элементом со своей геометрией. Граница между stylesheets защищена regression-тестом для launcher, assistant и diagnostics.
 
 Inter 400/500/600/700 для латиницы и кириллицы поставляется внутри Extension в WOFF2. Сетевой font provider не используется; системный stack остаётся fallback.
 
-`BuildArtifactSearch` получает агрегированный список последних успешных builds, ограничивает обработку 20 элементами и запускает не более четырёх `ArtifactResolver` одновременно. В presentation state попадают только результаты `Resolved` с одним кандидатом; порядок карточек соответствует порядку builds после сортировки.
+`BuildArtifactSearch` получает агрегированный список последних успешных builds, ограничивает обработку 20 элементами и запускает не более четырёх `ArtifactResolver` одновременно. `BuildFinder` добавляет bounded locator для регистронезависимого частичного поиска в branch либо точного публичного `build.number`; пользовательское значение передаётся в locator как Base64url. В presentation state попадают только результаты `Resolved` с одним кандидатом; порядок карточек по умолчанию newest-first и может временно переключаться пользователем.
+
+Параметры последнего запущенного поиска сохраняются через `SelectionStorage`. Черновые изменения живут только в состоянии React и откатываются при закрытии основной панели. `SearchHistoryStorage` хранит по пять уникальных запросов на режим в `chrome.storage.local`, используя ключ, ограниченный normalized TeamCity origin.
 
 Клик по публичному номеру build передаёт в service worker только opaque `buildId`. Service worker повторно валидирует ID, формирует same-origin TeamCity URL из origin вкладки-источника и создаёт неактивную вкладку в том же окне. Произвольный URL из UI в этот контракт не принимается, текущая TeamCity-вкладка остаётся активной.
+
+Запуск скачивания передаёт в service worker тот же server-provided `contentHref`, который используется для копирования URL. Service worker проверяет корректность URL, HTTPS origin вкладки-источника, совпадение origin и отсутствие credentials, затем открывает точный URL в неактивной вкладке того же окна. Cross-origin URL отклоняются; форма same-origin пути дополнительно не ограничивается.
 
 DOM-интеграция TeamCity изолируется в `TeamCityPageIntegration`. В MVP она отвечает только за общий launcher. Во второй итерации в неё добавляется обнаружение строк builds и монтирование локальных кнопок.
 

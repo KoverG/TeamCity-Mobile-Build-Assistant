@@ -2,11 +2,15 @@ import type {
   MobileEnvironment,
   MobileOperatingSystem,
 } from '../teamcity/BuildConfigurationClassifier'
+import type { BuildSearchMode } from '../teamcity/BuildSearch'
 
 export interface RememberedSelection {
   projectId: string
   os: MobileOperatingSystem
   environment: MobileEnvironment
+  searchMode?: BuildSearchMode
+  taskQuery?: string
+  buildQuery?: string
 }
 
 export interface SelectionStorage {
@@ -28,6 +32,11 @@ function isRememberedSelection(value: unknown): value is RememberedSelection {
   }
 
   const selection = value as Partial<RememberedSelection>
+  const searchValuesValid = (
+    (selection.searchMode === undefined || selection.searchMode === 'task' || selection.searchMode === 'build') &&
+    (selection.taskQuery === undefined || typeof selection.taskQuery === 'string') &&
+    (selection.buildQuery === undefined || typeof selection.buildQuery === 'string')
+  )
   return (
     typeof selection.projectId === 'string' &&
     (selection.os === 'Android' || selection.os === 'iOS' || selection.os === 'Unclassified') &&
@@ -36,7 +45,8 @@ function isRememberedSelection(value: unknown): value is RememberedSelection {
       selection.environment === 'Preview' ||
       selection.environment === 'PreProduction' ||
       selection.environment === 'Production' ||
-      selection.environment === 'Unclassified')
+      selection.environment === 'Unclassified') &&
+    searchValuesValid
   )
 }
 

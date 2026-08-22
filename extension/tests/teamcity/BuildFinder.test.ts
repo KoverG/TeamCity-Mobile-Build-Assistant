@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { FakeTeamCityHttpClient } from '../test/FakeTeamCityHttpClient'
-import { createSuccessfulBuildsPath, loadSuccessfulBuilds } from './BuildFinder'
+import { FakeTeamCityHttpClient } from '../helpers/FakeTeamCityHttpClient'
+import { createSuccessfulBuildsPath, loadSuccessfulBuilds } from '../../src/teamcity/BuildFinder'
 
 describe('BuildFinder', () => {
   it('requests only successful finished builds while allowing every branch', () => {

@@ -2,7 +2,7 @@
 
 - Статус: руководящий delivery plan
 - Дата фиксации: 2026-08-08
-- Последнее обновление: 2026-08-22 (версия 1.2.0)
+- Последнее обновление: 2026-08-22 (версия 1.2.1)
 
 Связанные документы:
 
@@ -32,6 +32,14 @@ TeamCityHelper/
 │   │   ├── diagnostics/
 │   │   ├── storage/
 │   │   └── teamcity/
+│   ├── tests/
+│   │   ├── additional-actions/
+│   │   ├── background/
+│   │   ├── content/
+│   │   ├── diagnostics/
+│   │   ├── storage/
+│   │   ├── teamcity/
+│   │   └── helpers/
 │   └── package.json
 ├── docs/
 ├── scripts/
@@ -159,6 +167,8 @@ Acceptance criteria:
 Эти решения принимаются вместе с разработкой backend. Новый adapter подключается к существующему `AdditionalActionsService`, не меняя TeamCity-модули и UI-слоты.
 
 ## 9. Стратегия тестирования
+
+Extension tests изолированы от production source в `extension/tests`, повторяют доменную структуру `extension/src` и проверяются отдельной TypeScript-конфигурацией.
 
 ### Extension unit tests
 

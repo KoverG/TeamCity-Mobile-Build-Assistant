@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { TeamCityService } from '../teamcity/TeamCityService'
-import { DiagnosticRuntime } from './DiagnosticRuntime'
+import type { TeamCityService } from '../../src/teamcity/TeamCityService'
+import { DiagnosticRuntime } from '../../src/diagnostics/DiagnosticRuntime'
 
 function serviceStub(): TeamCityService {
   return {

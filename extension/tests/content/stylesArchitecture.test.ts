@@ -8,17 +8,17 @@ function readStyles(relativePath: string): string {
 }
 
 describe('content style boundaries', () => {
-  const tokenStyles = readStyles('./tokens.css')
-  const navTabStyles = readStyles('./TeamCityNavTab.css')
-  const panelStyles = readStyles('./AssistantPanel.css')
-  const controlStyles = readStyles('./assistant/AssistantControls.css')
-  const resultStyles = readStyles('./assistant/BuildResults.css')
+  const tokenStyles = readStyles('../../src/content/tokens.css')
+  const navTabStyles = readStyles('../../src/content/TeamCityNavTab.css')
+  const panelStyles = readStyles('../../src/content/AssistantPanel.css')
+  const controlStyles = readStyles('../../src/content/assistant/AssistantControls.css')
+  const resultStyles = readStyles('../../src/content/assistant/BuildResults.css')
   const assistantStyles = [
     panelStyles,
     controlStyles,
     resultStyles,
   ].join('\n')
-  const diagnosticStyles = readStyles('../diagnostics/DiagnosticConsole.css')
+  const diagnosticStyles = readStyles('../../src/diagnostics/DiagnosticConsole.css')
   const assistantOnlySelectors = /\.tcba-(assistant(?:\b|__|--)|assistant-workspace(?:\b|--)|toolbar(?:\b|__|--)|combobox(?:\b|__|--)|field-(?:dropdown|option)(?:\b|__|--)|platform(?:\b|__|--)|search-field(?:\b|__|--)|results(?:\b|__|--)|build-row(?:\b|__|--)|build-card(?:\b|__|--)|action-button(?:\b|--)|search-button(?:\b|--)|stop-button(?:\b|--)|toast\b)/
   const navTabOnlySelectors = /\.tcba-(shell(?:\b|--)|nav-tab(?:\b|__|--)|tab__(?:\w|-)+|launcher\b|panel-stack\b)/
 

@@ -30,13 +30,14 @@ const waitingLoaderUrl = contentAssetUrl(waitingLoaderAsset)
 
 export interface AssistantToast {
   message: string
-  tone: 'success' | 'error'
+  tone: 'success' | 'error' | 'neutral'
 }
 
 interface BuildResultsProps {
   status: 'idle' | 'loading' | 'ready' | 'error'
   hasSearched: boolean
   errorMessage?: string
+  warningMessage?: string
   matches: readonly BuildArtifactMatch[]
   selectedBuildIds: ReadonlySet<string>
   toast?: AssistantToast
@@ -198,10 +199,20 @@ function MascotState({ type }: { type: 'hello' | 'waiting' | 'not-found' }) {
   )
 }
 
+function PartialResultsWarning({ message, onRetry }: { message: string; onRetry(): void }) {
+  return (
+    <div className="tcba-results-warning" role="status">
+      <span>{message}</span>
+      <button type="button" onClick={onRetry}>Повторить</button>
+    </div>
+  )
+}
+
 export function BuildResults({
   status,
   hasSearched,
   errorMessage,
+  warningMessage,
   matches,
   selectedBuildIds,
   toast,
@@ -304,7 +315,14 @@ export function BuildResults({
       ) : !hasSearched ? (
         <MascotState type="hello" />
       ) : !showCards ? (
-        <MascotState type="not-found" />
+        warningMessage === undefined ? (
+          <MascotState type="not-found" />
+        ) : (
+          <div className="tcba-results__state-stack">
+            <PartialResultsWarning message={warningMessage} onRetry={onRetry} />
+            <MascotState type="not-found" />
+          </div>
+        )
       ) : (
         <>
           <div className="tcba-results__viewport">
@@ -314,6 +332,9 @@ export function BuildResults({
               ref={listRef}
               onScroll={() => setRevealedBuildId(undefined)}
             >
+              {warningMessage !== undefined && (
+                <PartialResultsWarning message={warningMessage} onRetry={onRetry} />
+              )}
               {sortedMatches.map((match) => (
                 <BuildCard
                   key={match.build.id}

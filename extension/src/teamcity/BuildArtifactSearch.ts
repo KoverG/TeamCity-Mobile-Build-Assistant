@@ -9,18 +9,26 @@ import type { BuildSearchQuery } from './BuildSearch'
 export interface BuildArtifactSearchConfiguration {
   id: string
   name: string
+  platform: MobilePlatform | 'other'
+}
+
+export interface ResolvedBuildArtifactSearchConfiguration
+  extends Omit<BuildArtifactSearchConfiguration, 'platform'> {
   platform: MobilePlatform
 }
 
 export interface BuildArtifactMatch {
   build: TeamCityBuild
-  configuration: BuildArtifactSearchConfiguration
+  configuration: ResolvedBuildArtifactSearchConfiguration
   artifact: ArtifactCandidate
 }
 
 export interface BuildArtifactSearchResult {
   matches: BuildArtifactMatch[]
   checkedBuilds: number
+  failedConfigurations: number
+  failedBuilds: number
+  ambiguousBuilds: number
   transport: TeamCityTransportKind
 }
 
@@ -31,12 +39,57 @@ export interface BuildArtifactSearchOptions {
   timeoutMs?: number
   requestTimeoutMs?: number
   signal?: AbortSignal
+  onProgress?(result: BuildArtifactSearchResult): void
 }
 
 const defaultMaximumBuilds = 20
 const defaultConcurrency = 4
 const defaultTimeoutMs = 120_000
 const defaultRequestTimeoutMs = 30_000
+type ConfigurationArtifactResult =
+  | { status: 'Resolved'; artifact: ArtifactCandidate; platform: MobilePlatform }
+  | { status: 'NotFound' | 'Ambiguous' }
+
+async function resolveConfigurationArtifact(
+  service: TeamCityService,
+  build: TeamCityBuild,
+  configuration: BuildArtifactSearchConfiguration,
+  signal: AbortSignal,
+  deadline: number,
+  requestTimeoutMs: number,
+): Promise<ConfigurationArtifactResult> {
+  const platforms: readonly MobilePlatform[] = configuration.platform === 'other'
+    ? ['android', 'ios']
+    : [configuration.platform]
+  const resolved: Array<{ artifact: ArtifactCandidate; platform: MobilePlatform }> = []
+
+  for (const platform of platforms) {
+    const resolution = await service.resolveArtifact(
+      build.id,
+      build.buildTypeId,
+      platform,
+      {
+        signal,
+        timeoutMs: Math.max(1, deadline - Date.now()),
+        requestTimeoutMs,
+      },
+    )
+    if (resolution.status === 'Ambiguous') {
+      return { status: 'Ambiguous' }
+    }
+    if (resolution.status === 'Resolved' && resolution.candidates.length === 1) {
+      resolved.push({ artifact: resolution.candidates[0], platform })
+    }
+  }
+
+  if (resolved.length === 0) {
+    return { status: 'NotFound' }
+  }
+  if (resolved.length === 1) {
+    return { status: 'Resolved', ...resolved[0] }
+  }
+  return { status: 'Ambiguous' }
+}
 
 export async function searchBuildArtifacts(
   service: TeamCityService,
@@ -47,7 +100,14 @@ export async function searchBuildArtifacts(
     configurations.map((configuration) => [configuration.id, configuration]),
   )
   if (uniqueConfigurations.size === 0) {
-    return { matches: [], checkedBuilds: 0, transport: 'service-worker' }
+    return {
+      matches: [],
+      checkedBuilds: 0,
+      failedConfigurations: 0,
+      failedBuilds: 0,
+      ambiguousBuilds: 0,
+      transport: 'service-worker',
+    }
   }
 
   const maximumBuilds = boundedInteger(options.maximumBuilds, defaultMaximumBuilds, 1, 20)
@@ -81,7 +141,24 @@ export async function searchBuildArtifacts(
     const matches: Array<BuildArtifactMatch | undefined> = new Array(builds.length)
     let cursor = 0
     let completedResolutions = 0
+    let failedResolutions = 0
+    let ambiguousResolutions = 0
     let firstResolutionError: unknown
+
+    const notifyProgress = () => {
+      try {
+        options.onProgress?.({
+          matches: matches.filter((match) => match !== undefined),
+          checkedBuilds: completedResolutions + failedResolutions,
+          failedConfigurations: buildResult.failedConfigurations,
+          failedBuilds: failedResolutions,
+          ambiguousBuilds: ambiguousResolutions,
+          transport: buildResult.transport,
+        })
+      } catch {
+        // UI progress reporting must never affect the TeamCity search.
+      }
+    }
 
     const worker = async () => {
       while (!controller.signal.aborted) {
@@ -98,26 +175,39 @@ export async function searchBuildArtifacts(
         }
 
         try {
-          const resolution = await service.resolveArtifact(
-            build.id,
-            build.buildTypeId,
-            configuration.platform,
-            {
-              signal: controller.signal,
-              timeoutMs: Math.max(1, deadline - Date.now()),
-              requestTimeoutMs,
-            },
+          const artifactResult = await resolveConfigurationArtifact(
+            service,
+            build,
+            configuration,
+            controller.signal,
+            deadline,
+            requestTimeoutMs,
           )
-          if (resolution.status === 'Resolved' && resolution.candidates.length === 1) {
+          if (controller.signal.aborted) {
+            return
+          }
+          if (artifactResult.status === 'Resolved') {
             matches[index] = {
               build,
-              configuration,
-              artifact: resolution.candidates[0],
+              configuration: {
+                id: configuration.id,
+                name: configuration.name,
+                platform: artifactResult.platform,
+              },
+              artifact: artifactResult.artifact,
             }
+          } else if (artifactResult.status === 'Ambiguous') {
+            ambiguousResolutions += 1
           }
           completedResolutions += 1
+          notifyProgress()
         } catch (error) {
+          if (controller.signal.aborted) {
+            return
+          }
+          failedResolutions += 1
           firstResolutionError ??= error
+          notifyProgress()
         }
       }
     }
@@ -136,6 +226,9 @@ export async function searchBuildArtifacts(
     return {
       matches: matches.filter((match) => match !== undefined),
       checkedBuilds: builds.length,
+      failedConfigurations: buildResult.failedConfigurations,
+      failedBuilds: failedResolutions,
+      ambiguousBuilds: ambiguousResolutions,
       transport: buildResult.transport,
     }
   } finally {

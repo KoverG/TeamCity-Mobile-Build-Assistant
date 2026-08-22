@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { openTeamCityArtifactTab } from './openTeamCityArtifactTab'
+import { openTeamCityBuildTab } from '../../src/background/openTeamCityBuildTab'
 
 function createSender(url: string): chrome.runtime.MessageSender {
   return {
@@ -7,29 +7,29 @@ function createSender(url: string): chrome.runtime.MessageSender {
   }
 }
 
-describe('openTeamCityArtifactTab', () => {
-  it('opens the exact trusted artifact URL in an inactive tab in the source window', async () => {
+describe('openTeamCityBuildTab', () => {
+  it('opens a trusted build page in an inactive tab in the source window', async () => {
     const createTab = vi.fn().mockResolvedValue({})
 
-    const response = await openTeamCityArtifactTab(
-      '/downloadBuild.html?buildId=12345',
+    const response = await openTeamCityBuildTab(
+      '12345',
       createSender('https://teamcity.example.test/project.html'),
       createTab,
     )
 
     expect(response).toEqual({ ok: true })
     expect(createTab).toHaveBeenCalledWith({
-      url: 'https://teamcity.example.test/downloadBuild.html?buildId=12345',
+      url: 'https://teamcity.example.test/viewLog.html?buildId=12345',
       active: false,
       windowId: 3,
     })
   })
 
-  it('rejects a cross-origin artifact URL', async () => {
+  it('rejects invalid build identifiers before opening a tab', async () => {
     const createTab = vi.fn().mockResolvedValue({})
 
-    const response = await openTeamCityArtifactTab(
-      'https://other.example.test/downloadBuild.html?buildId=12345',
+    const response = await openTeamCityBuildTab(
+      '12345&unexpected=value',
       createSender('https://teamcity.example.test/project.html'),
       createTab,
     )
@@ -41,8 +41,8 @@ describe('openTeamCityArtifactTab', () => {
   it('rejects a non-HTTPS source tab', async () => {
     const createTab = vi.fn().mockResolvedValue({})
 
-    const response = await openTeamCityArtifactTab(
-      '/downloadBuild.html?buildId=12345',
+    const response = await openTeamCityBuildTab(
+      '12345',
       createSender('http://teamcity.example.test/project.html'),
       createTab,
     )

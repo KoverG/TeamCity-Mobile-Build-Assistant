@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
-import type { MobilePlatform } from '../../teamcity/ArtifactResolver'
 import {
   normalizeBuildSearchQuery,
   type BuildSearchMode,
@@ -8,6 +7,7 @@ import {
   searchBuildArtifacts,
   type BuildArtifactMatch,
   type BuildArtifactSearchConfiguration,
+  type BuildArtifactSearchResult,
 } from '../../teamcity/BuildArtifactSearch'
 import {
   classifyBuildConfigurations,
@@ -23,6 +23,9 @@ import {
   type SearchHistory,
   type SearchHistoryStorage,
 } from '../../storage/SearchHistoryStorage'
+export type AssistantPlatformFilter = BuildArtifactSearchConfiguration['platform']
+const assistantPlatformFilters = ['android', 'ios', 'other'] as const
+
 
 type CatalogStatus = 'idle' | 'loading' | 'ready' | 'error'
 type SearchStatus = 'idle' | 'loading' | 'ready' | 'error'
@@ -32,7 +35,7 @@ interface AssistantState {
   searchStatus: SearchStatus
   configurations: ClassifiedBuildConfiguration[]
   selectedProjectId: string
-  selectedPlatforms: MobilePlatform[]
+  selectedPlatforms: AssistantPlatformFilter[]
   selectedEnvironment: MobileEnvironment | ''
   searchMode: BuildSearchMode
   searchQueries: Record<BuildSearchMode, string>
@@ -41,7 +44,9 @@ interface AssistantState {
   matches: BuildArtifactMatch[]
   selectedBuildIds: ReadonlySet<string>
   catalogErrorMessage?: string
+  catalogWarningMessage?: string
   searchErrorMessage?: string
+  searchWarningMessage?: string
   hasSearched: boolean
 }
 
@@ -53,16 +58,19 @@ type AssistantAction =
       draft: AssistantSearchParameters
       appliedSearch: AssistantSearchParameters
       searchHistory: SearchHistory
+      warningMessage?: string
     }
   | { type: 'catalog-error'; message: string }
   | { type: 'select-project'; projectId: string }
-  | { type: 'toggle-platform'; platform: MobilePlatform }
+  | { type: 'toggle-platform'; platform: AssistantPlatformFilter }
   | { type: 'select-environment'; environment: MobileEnvironment | '' }
   | { type: 'select-search-mode'; mode: BuildSearchMode }
   | { type: 'set-search-query'; mode: BuildSearchMode; query: string }
   | { type: 'search-loading'; appliedSearch: AssistantSearchParameters }
-  | { type: 'search-ready'; matches: BuildArtifactMatch[] }
+  | { type: 'search-progress'; matches: BuildArtifactMatch[]; warningMessage?: string }
+  | { type: 'search-ready'; matches: BuildArtifactMatch[]; warningMessage?: string }
   | { type: 'search-stopped' }
+  | { type: 'search-discarded' }
   | { type: 'search-error'; message: string }
   | { type: 'remember-query'; history: SearchHistory }
   | { type: 'clear-history'; mode: BuildSearchMode }
@@ -71,7 +79,7 @@ type AssistantAction =
 
 interface AssistantSelection {
   projectId: string
-  platforms: MobilePlatform[]
+  platforms: AssistantPlatformFilter[]
   environment: MobileEnvironment | ''
 }
 
@@ -96,10 +104,11 @@ export interface AssistantController {
   state: AssistantState
   projects: ProjectOption[]
   environments: MobileEnvironment[]
+  hasOtherConfigurations: boolean
   canSearch: boolean
   loadCatalog(): Promise<void>
   selectProject(projectId: string): void
-  togglePlatform(platform: MobilePlatform): void
+  togglePlatform(platform: AssistantPlatformFilter): void
   selectEnvironment(environment: MobileEnvironment | ''): void
   selectSearchMode(mode: BuildSearchMode): void
   setSearchQuery(mode: BuildSearchMode, query: string): void
@@ -145,7 +154,12 @@ const initialState = createInitialState()
 function reducer(state: AssistantState, action: AssistantAction): AssistantState {
   switch (action.type) {
     case 'catalog-loading':
-      return { ...state, catalogStatus: 'loading', catalogErrorMessage: undefined }
+      return {
+        ...state,
+        catalogStatus: 'loading',
+        catalogErrorMessage: undefined,
+        catalogWarningMessage: undefined,
+      }
     case 'catalog-ready':
       return {
         ...state,
@@ -159,12 +173,14 @@ function reducer(state: AssistantState, action: AssistantAction): AssistantState
         appliedSearch: action.appliedSearch,
         searchHistory: action.searchHistory,
         catalogErrorMessage: undefined,
+        catalogWarningMessage: action.warningMessage,
       }
     case 'catalog-error':
       return {
         ...state,
         catalogStatus: 'error',
         catalogErrorMessage: action.message,
+        catalogWarningMessage: undefined,
       }
     case 'select-project':
       return {
@@ -206,7 +222,14 @@ function reducer(state: AssistantState, action: AssistantAction): AssistantState
         matches: [],
         selectedBuildIds: new Set(),
         searchErrorMessage: undefined,
+        searchWarningMessage: undefined,
         hasSearched: true,
+      }
+    case 'search-progress':
+      return {
+        ...state,
+        matches: action.matches,
+        searchWarningMessage: action.warningMessage,
       }
     case 'search-ready':
       return {
@@ -215,15 +238,25 @@ function reducer(state: AssistantState, action: AssistantAction): AssistantState
         matches: action.matches,
         selectedBuildIds: new Set(),
         searchErrorMessage: undefined,
+        searchWarningMessage: action.warningMessage,
         hasSearched: true,
       }
     case 'search-stopped':
       return {
         ...state,
         searchStatus: 'ready',
+        selectedBuildIds: new Set(),
+        searchErrorMessage: undefined,
+        hasSearched: true,
+      }
+    case 'search-discarded':
+      return {
+        ...state,
+        searchStatus: 'ready',
         matches: [],
         selectedBuildIds: new Set(),
         searchErrorMessage: undefined,
+        searchWarningMessage: undefined,
         hasSearched: true,
       }
     case 'remember-query':
@@ -240,6 +273,7 @@ function reducer(state: AssistantState, action: AssistantAction): AssistantState
         matches: [],
         selectedBuildIds: new Set(),
         searchErrorMessage: action.message,
+        searchWarningMessage: undefined,
         hasSearched: true,
       }
     case 'toggle-build': {
@@ -280,35 +314,80 @@ function getSafeErrorMessage(error: unknown): string {
       return 'TeamCity вернул ответ неизвестного формата.'
   }
 }
+function getSearchWarningMessage(result: BuildArtifactSearchResult): string | undefined {
+  const messages: string[] = []
+  if (result.failedConfigurations > 0) {
+    messages.push(
+      `Результаты могут быть неполными: не удалось загрузить конфигураций — ${result.failedConfigurations}.`,
+    )
+  }
+  if (result.failedBuilds > 0) {
+    messages.push(
+      `Результаты неполные: не удалось проверить ${result.failedBuilds} из ${result.checkedBuilds} сборок.`,
+    )
+  }
+  if (result.ambiguousBuilds > 0) {
+    messages.push(
+      `Неоднозначные результаты: несколько подходящих артефактов найдено в ${result.ambiguousBuilds} из ${result.checkedBuilds} проверок.`,
+    )
+  }
+  return messages.length === 0 ? undefined : messages.join(' ')
+}
+
+function getCatalogWarningMessage(skippedConfigurations: number): string | undefined {
+  return skippedConfigurations > 0
+    ? `Каталог загружен не полностью: пропущено конфигураций — ${skippedConfigurations}.`
+    : undefined
+}
 
 function projectsFrom(configurations: readonly ClassifiedBuildConfiguration[]): ProjectOption[] {
   const projects = new Map<string, ProjectOption>()
   for (const configuration of configurations) {
-    if (configuration.os !== 'Unclassified') {
-      const [rootName] = configuration.projectName.split('/')
-      projects.set(configuration.projectId, {
-        id: configuration.projectId,
-        name: rootName?.trim() || configuration.projectName.trim(),
-      })
-    }
+    const [rootName] = configuration.projectName.split('/')
+    projects.set(configuration.projectId, {
+      id: configuration.projectId,
+      name: rootName?.trim() || configuration.projectName.trim(),
+    })
   }
   return [...projects.values()].sort((left, right) => left.name.localeCompare(right.name))
+}
+
+function platformFilterFor(
+  configuration: ClassifiedBuildConfiguration,
+): AssistantPlatformFilter {
+  if (configuration.os === 'Android') {
+    return 'android'
+  }
+  if (configuration.os === 'iOS') {
+    return 'ios'
+  }
+  return 'other'
+}
+function platformOptions(
+  configurations: readonly ClassifiedBuildConfiguration[],
+  projectId: string,
+): AssistantPlatformFilter[] {
+  return assistantPlatformFilters.filter((platform) =>
+    configurations.some((configuration) =>
+      configuration.projectId === projectId &&
+      !configuration.paused &&
+      platformFilterFor(configuration) === platform,
+    ),
+  )
 }
 
 function environmentOptions(
   configurations: readonly ClassifiedBuildConfiguration[],
   projectId: string,
-  platforms: readonly MobilePlatform[],
+  platforms: readonly AssistantPlatformFilter[],
 ): MobileEnvironment[] {
-  const selectedOs = new Set(
-    platforms.map((platform) => platform === 'android' ? 'Android' : 'iOS'),
-  )
+  const selectedPlatforms = new Set(platforms)
   return mobileEnvironments.filter((environment) =>
     environment !== 'Unclassified' && configurations.some((configuration) =>
       configuration.projectId === projectId &&
       configuration.environment === environment &&
-      configuration.os !== 'Unclassified' &&
-      (selectedOs.size === 0 || selectedOs.has(configuration.os)),
+      (selectedPlatforms.size === 0 ||
+        selectedPlatforms.has(platformFilterFor(configuration))),
     ),
   )
 }
@@ -321,8 +400,9 @@ function resolvedSelection(
   const projectId = projects.some((project) => project.id === current.projectId)
     ? current.projectId
     : ''
+  const availablePlatforms = platformOptions(configurations, projectId)
   const platforms = current.projectId === projectId
-    ? current.platforms
+    ? current.platforms.filter((platform) => availablePlatforms.includes(platform))
     : []
   const environments = environmentOptions(configurations, projectId, platforms)
   const preferredEnvironment = current.projectId === projectId
@@ -384,15 +464,18 @@ export function useAssistantController({
     ),
     [state.configurations, state.selectedPlatforms, state.selectedProjectId],
   )
+  const hasOtherConfigurations = state.configurations.some((configuration) =>
+    configuration.projectId === state.selectedProjectId &&
+    configuration.os === 'Unclassified' &&
+    !configuration.paused,
+  )
   const searchableConfigurations = useMemo(() => {
-    const selectedOs = new Set(
-      state.selectedPlatforms.map((platform) => platform === 'android' ? 'Android' : 'iOS'),
-    )
+    const selectedPlatforms = new Set(state.selectedPlatforms)
     return state.configurations.filter((configuration) =>
       configuration.projectId === state.selectedProjectId &&
-      configuration.os !== 'Unclassified' &&
       !configuration.paused &&
-      (selectedOs.size === 0 || selectedOs.has(configuration.os)) &&
+      (selectedPlatforms.size === 0 ||
+        selectedPlatforms.has(platformFilterFor(configuration))) &&
       (state.selectedEnvironment === '' || configuration.environment === state.selectedEnvironment),
     )
   }, [
@@ -417,7 +500,7 @@ export function useAssistantController({
     activeSearch?.abort()
     const current = state
     if (current.searchStatus === 'loading') {
-      dispatch({ type: 'search-stopped' })
+      dispatch({ type: 'search-discarded' })
     }
     dispatch({ type: 'catalog-loading' })
     try {
@@ -438,6 +521,7 @@ export function useAssistantController({
         draft: resolvedParameters(configurations, parametersFromState(current)),
         appliedSearch: resolvedParameters(configurations, current.appliedSearch),
         searchHistory: history,
+        warningMessage: getCatalogWarningMessage(result.skippedConfigurations),
       })
     } catch (error) {
       if (requestId === catalogRequestRef.current) {
@@ -468,7 +552,7 @@ export function useAssistantController({
       (configuration) => ({
         id: configuration.id,
         name: configuration.name,
-        platform: configuration.os === 'Android' ? 'android' : 'ios',
+        platform: platformFilterFor(configuration),
       }),
     )
     try {
@@ -479,9 +563,22 @@ export function useAssistantController({
           ? undefined
           : { mode: current.searchMode, value: normalizedQuery },
         signal: controller.signal,
+        onProgress: (progress) => {
+          if (requestId === searchRequestRef.current && !controller.signal.aborted) {
+            dispatch({
+              type: 'search-progress',
+              matches: progress.matches,
+              warningMessage: getSearchWarningMessage(progress),
+            })
+          }
+        },
       })
       if (requestId === searchRequestRef.current) {
-        dispatch({ type: 'search-ready', matches: result.matches })
+        dispatch({
+          type: 'search-ready',
+          matches: result.matches,
+          warningMessage: getSearchWarningMessage(result),
+        })
         const nextHistory = withRememberedQuery(
           state.searchHistory,
           current.searchMode,
@@ -532,6 +629,7 @@ export function useAssistantController({
     state,
     projects,
     environments,
+    hasOtherConfigurations,
     canSearch: state.catalogStatus === 'ready' && searchableConfigurations.length > 0,
     loadCatalog,
     selectProject: (projectId) => dispatch({ type: 'select-project', projectId }),

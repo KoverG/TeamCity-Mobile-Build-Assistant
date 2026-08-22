@@ -1,17 +1,23 @@
-import type { MobilePlatform } from '../../teamcity/ArtifactResolver'
+import type { AssistantPlatformFilter } from './useAssistantController'
 import { AndroidIcon, AppleIcon } from './Icons'
 
 interface PlatformFilterProps {
-  selected: readonly MobilePlatform[]
+  selected: readonly AssistantPlatformFilter[]
+  showOther: boolean
   disabled?: boolean
-  onToggle(platform: MobilePlatform): void
+  onToggle(platform: AssistantPlatformFilter): void
 }
 
-export function PlatformFilter({ selected, disabled = false, onToggle }: PlatformFilterProps) {
+export function PlatformFilter({
+  selected,
+  showOther,
+  disabled = false,
+  onToggle,
+}: PlatformFilterProps) {
   return (
     <fieldset className="tcba-platform" disabled={disabled}>
       <legend className="tcba-field-label">Платформа</legend>
-      <div className="tcba-platform__options">
+      <div className={`tcba-platform__options${showOther ? ' tcba-platform__options--with-other' : ''}`}>
         <button
           type="button"
           aria-label="Android"
@@ -28,6 +34,18 @@ export function PlatformFilter({ selected, disabled = false, onToggle }: Platfor
         >
           <AppleIcon />
         </button>
+        {showOther && (
+          <button
+            className="tcba-platform__other"
+            type="button"
+            aria-label="Другие — конфигурации с нераспознанной платформой"
+            title="Конфигурации с нераспознанной платформой"
+            aria-pressed={selected.includes('other')}
+            onClick={() => onToggle('other')}
+          >
+            Другие
+          </button>
+        )}
       </div>
     </fieldset>
   )

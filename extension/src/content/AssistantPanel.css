@@ -232,6 +232,17 @@
   font-weight: 600;
 }
 
+.tcba-assistant__warning {
+  margin-top: 7px;
+  padding: 7px 8px;
+  color: #725500;
+  background: #fff8dc;
+  border: 1px solid #e6c85c;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
 .tcba-sr-only {
   position: absolute;
   width: 1px;

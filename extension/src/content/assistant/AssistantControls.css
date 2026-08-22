@@ -330,6 +330,11 @@
   gap: 8px;
 }
 
+.tcba-platform__options--with-other {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+
 .tcba-platform__options button {
   display: grid;
   height: 40px;
@@ -362,6 +367,12 @@
   width: 28px;
   height: 28px;
 }
+
+.tcba-platform__options .tcba-platform__other {
+  font-size: 12px;
+  font-weight: 600;
+}
+
 
 .tcba-search-field {
   position: relative;

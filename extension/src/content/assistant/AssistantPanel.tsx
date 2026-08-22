@@ -10,10 +10,11 @@ interface AssistantPanelProps {
   id: string
   controller: AssistantController
   onSearch(): void
+  onStopSearch(): void
   onClose(): void
 }
 
-export function AssistantPanel({ id, controller, onSearch, onClose }: AssistantPanelProps) {
+export function AssistantPanel({ id, controller, onSearch, onStopSearch, onClose }: AssistantPanelProps) {
   const { state } = controller
   const searching = state.searchStatus === 'loading'
   const catalogLoading = state.catalogStatus === 'loading'
@@ -62,6 +63,7 @@ export function AssistantPanel({ id, controller, onSearch, onClose }: AssistantP
         />
         <PlatformFilter
           selected={state.selectedPlatforms}
+          showOther={controller.hasOtherConfigurations}
           disabled={state.selectedProjectId.length === 0 || catalogLoading || searching}
           onToggle={controller.togglePlatform}
         />
@@ -73,6 +75,12 @@ export function AssistantPanel({ id, controller, onSearch, onClose }: AssistantP
           <button type="button" onClick={() => void controller.loadCatalog()}>
             Повторить
           </button>
+        </div>
+      )}
+
+      {state.catalogStatus === 'ready' && state.catalogWarningMessage !== undefined && (
+        <div className="tcba-assistant__warning" role="status">
+          {state.catalogWarningMessage}
         </div>
       )}
 
@@ -93,7 +101,7 @@ export function AssistantPanel({ id, controller, onSearch, onClose }: AssistantP
             type="button"
             aria-label="Остановить поиск сборок"
             title="Остановить поиск"
-            onClick={controller.stopSearch}
+            onClick={onStopSearch}
           >
             <StopIcon />
           </button>

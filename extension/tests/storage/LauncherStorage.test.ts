@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ChromeLauncherStorage } from './LauncherStorage'
+import { ChromeLauncherStorage } from '../../src/storage/LauncherStorage'
 
 const values: Record<string, unknown> = {}
 

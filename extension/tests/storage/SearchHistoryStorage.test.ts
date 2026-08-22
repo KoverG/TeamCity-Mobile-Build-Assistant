@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   ChromeSearchHistoryStorage,
   withRememberedQuery,
-} from './SearchHistoryStorage'
+} from '../../src/storage/SearchHistoryStorage'
 
 const values: Record<string, unknown> = {}
 

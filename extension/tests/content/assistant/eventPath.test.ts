@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { eventPathContains, findEventPathElement } from './eventPath'
+import { eventPathContains, findEventPathElement } from '../../../src/content/assistant/eventPath'
 
 describe('Shadow DOM event path helpers', () => {
   it('finds internal controls when the public event target is the shadow host', () => {

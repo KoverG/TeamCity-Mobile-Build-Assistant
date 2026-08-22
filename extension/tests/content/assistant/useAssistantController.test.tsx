@@ -1,8 +1,8 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { BuildConfigurationClassifier } from '../../teamcity/BuildConfigurationClassifier'
-import type { TeamCityService } from '../../teamcity/TeamCityService'
-import { useAssistantController } from './useAssistantController'
+import { BuildConfigurationClassifier } from '../../../src/teamcity/BuildConfigurationClassifier'
+import type { TeamCityService } from '../../../src/teamcity/TeamCityService'
+import { useAssistantController } from '../../../src/content/assistant/useAssistantController'
 
 describe('useAssistantController', () => {
   it('cancels an active search before refreshing the catalog', async () => {
@@ -16,6 +16,7 @@ describe('useAssistantController', () => {
           projectName: 'Synthetic Mobile',
           paused: false,
         }],
+        skippedConfigurations: 0,
         transport: 'main-world',
       }),
       loadBuilds: vi.fn().mockImplementation(() => new Promise((resolve) => {
@@ -52,7 +53,7 @@ describe('useAssistantController', () => {
     expect(vi.mocked(service.loadBuilds).mock.calls[0]?.[1]?.signal).toHaveProperty('aborted', true)
 
     await act(async () => {
-      finishLoading?.({ builds: [], transport: 'main-world' })
+      finishLoading?.({ builds: [], failedConfigurations: 0, transport: 'main-world' })
       await searchPromise
     })
   })

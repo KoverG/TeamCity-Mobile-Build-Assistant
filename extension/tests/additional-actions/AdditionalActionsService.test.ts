@@ -3,7 +3,7 @@ import {
   createAdditionalActionsService,
   NullAdditionalActionsGateway,
   type AdditionalActionsGateway,
-} from './AdditionalActionsService'
+} from '../../src/additional-actions/AdditionalActionsService'
 
 function createGateway(actions: unknown): AdditionalActionsGateway & {
   executeAction: ReturnType<typeof vi.fn>

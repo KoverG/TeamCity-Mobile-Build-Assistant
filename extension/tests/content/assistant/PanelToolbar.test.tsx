@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { NavTabMainButtonVisual } from '../TeamCityNavTabVisual'
-import { PanelToolbar } from './PanelToolbar'
+import { NavTabMainButtonVisual } from '../../../src/content/TeamCityNavTabVisual'
+import { PanelToolbar } from '../../../src/content/assistant/PanelToolbar'
 
 afterEach(() => {
   cleanup()

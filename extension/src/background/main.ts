@@ -1,18 +1,31 @@
 import {
   isOpenTeamCityArtifactRequest,
   isOpenTeamCityBuildRequest,
+  isTeamCityCancelRequest,
   isTeamCityGetRequest,
   type TeamCityRawResponse,
   type TeamCityTransportKind,
 } from '../teamcity/contracts'
 import { normalizeTeamCityRestPath } from '../teamcity/restPath'
+import {
+  abortBoundedTeamCityRequest,
+  fetchBoundedTeamCityResponse,
+  maximumTeamCityResponseBytes,
+} from './boundedTeamCityFetch'
 import { openTeamCityArtifactTab } from './openTeamCityArtifactTab'
 import { openTeamCityBuildTab } from './openTeamCityBuildTab'
 
 const contentScriptId = 'teamcity-mobile-build-assistant'
-const maximumResponseCharacters = 4_000_000
 const defaultRequestTimeoutMs = 15_000
 const maximumRequestTimeoutMs = 30_000
+
+interface ActiveTeamCityRequest {
+  tabId: number
+  route: TeamCityTransportKind
+  cancelled: boolean
+}
+
+const activeTeamCityRequests = new Map<string, ActiveTeamCityRequest>()
 
 function normalizeTimeout(timeoutMs: number | undefined): number {
   if (timeoutMs === undefined) {
@@ -30,34 +43,6 @@ function getOriginPattern(rawUrl: string): string {
   }
 
   return `${url.origin}/*`
-}
-
-function isLoginPath(rawUrl: string): boolean {
-  try {
-    const path = new URL(rawUrl).pathname.toLowerCase()
-    return path === '/login.html' || path.endsWith('/login.html') || path.endsWith('/login')
-  } catch {
-    return false
-  }
-}
-
-async function readResponse(
-  response: Response,
-  transport: TeamCityTransportKind,
-): Promise<TeamCityRawResponse> {
-  const bodyText = await response.text()
-  const truncated = bodyText.length > maximumResponseCharacters
-
-  return {
-    ok: response.ok,
-    status: response.status,
-    contentType: response.headers.get('content-type') ?? '',
-    bodyText: truncated ? bodyText.slice(0, maximumResponseCharacters) : bodyText,
-    redirectedToLogin: isLoginPath(response.url),
-    truncated,
-    transport,
-    error: truncated ? 'response-too-large' : undefined,
-  }
 }
 
 function createFailure(
@@ -80,109 +65,42 @@ async function fetchFromServiceWorker(
   origin: string,
   path: string,
   timeoutMs: number,
+  requestId: string,
 ): Promise<TeamCityRawResponse> {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), timeoutMs)
-
-  try {
-    const response = await fetch(new URL(path, origin), {
-      method: 'GET',
-      credentials: 'include',
-      redirect: 'follow',
-      headers: {
-        Accept: 'application/json',
-      },
-      signal: controller.signal,
-    })
-
-    return await readResponse(response, 'service-worker')
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      return createFailure('service-worker', 'timeout')
-    }
-    return createFailure('service-worker', 'network')
-  } finally {
-    clearTimeout(timeout)
-  }
+  return fetchBoundedTeamCityResponse(
+    origin,
+    path,
+    maximumTeamCityResponseBytes,
+    timeoutMs,
+    'include',
+    'service-worker',
+    false,
+    requestId,
+  )
 }
 
 async function fetchFromMainWorld(
   tabId: number,
+  origin: string,
   path: string,
   timeoutMs: number,
+  requestId: string,
 ): Promise<TeamCityRawResponse> {
   try {
     const results = await chrome.scripting.executeScript({
       target: { tabId },
       world: 'MAIN',
-      args: [path, maximumResponseCharacters, timeoutMs],
-      func: async (requestPath: string, maximumCharacters: number, requestTimeoutMs: number) => {
-        const createPageFailure = (): TeamCityRawResponse => ({
-          ok: false,
-          status: 0,
-          contentType: '',
-          bodyText: '',
-          redirectedToLogin: false,
-          truncated: false,
-          transport: 'main-world',
-          error: 'network',
-        })
-
-        const controller = new AbortController()
-        const timeout = window.setTimeout(() => controller.abort(), requestTimeoutMs)
-
-        try {
-          const requestUrl = new URL(requestPath, window.location.origin)
-          if (
-            requestUrl.origin !== window.location.origin ||
-            requestUrl.hash.length > 0 ||
-            (requestUrl.pathname !== '/app/rest' &&
-              !requestUrl.pathname.startsWith('/app/rest/'))
-          ) {
-            return {
-              ...createPageFailure(),
-              error: 'invalid-request' as const,
-            }
-          }
-
-          const response = await fetch(requestUrl, {
-            method: 'GET',
-            credentials: 'same-origin',
-            redirect: 'follow',
-            headers: {
-              Accept: 'application/json',
-            },
-            signal: controller.signal,
-          })
-          const rawBody = await response.text()
-          const truncated = rawBody.length > maximumCharacters
-          const finalPath = new URL(response.url).pathname.toLowerCase()
-
-          return {
-            ok: response.ok,
-            status: response.status,
-            contentType: response.headers.get('content-type') ?? '',
-            bodyText: truncated ? rawBody.slice(0, maximumCharacters) : rawBody,
-            redirectedToLogin:
-              finalPath === '/login.html' ||
-              finalPath.endsWith('/login.html') ||
-              finalPath.endsWith('/login'),
-            truncated,
-            transport: 'main-world' as const,
-            error: truncated ? ('response-too-large' as const) : undefined,
-          }
-        } catch (error) {
-          return {
-            ...createPageFailure(),
-            error:
-              error instanceof DOMException && error.name === 'AbortError'
-                ? ('timeout' as const)
-                : ('network' as const),
-          }
-        } finally {
-          window.clearTimeout(timeout)
-        }
-      },
+      args: [
+        origin,
+        path,
+        maximumTeamCityResponseBytes,
+        timeoutMs,
+        'same-origin',
+        'main-world',
+        true,
+        requestId,
+      ],
+      func: fetchBoundedTeamCityResponse,
     })
 
     return results[0]?.result ?? createFailure('main-world', 'tab-unavailable')
@@ -201,9 +119,11 @@ function isUsableJson(response: TeamCityRawResponse): boolean {
 }
 
 async function executeTeamCityGet(
+  requestId: string,
   path: string,
   sender: chrome.runtime.MessageSender,
   timeoutMs: number | undefined,
+  activeRequest: ActiveTeamCityRequest,
 ): Promise<TeamCityRawResponse> {
   let normalizedPath: string
 
@@ -233,7 +153,12 @@ async function executeTeamCityGet(
   }
 
   const normalizedTimeout = normalizeTimeout(timeoutMs)
-  const serviceWorkerResponse = await fetchFromServiceWorker(origin, normalizedPath, normalizedTimeout)
+  const serviceWorkerResponse = await fetchFromServiceWorker(
+    origin,
+    normalizedPath,
+    normalizedTimeout,
+    requestId,
+  )
 
   if (isUsableJson(serviceWorkerResponse)) {
     return { ...serviceWorkerResponse, attemptedTransports: ['service-worker'] }
@@ -243,7 +168,21 @@ async function executeTeamCityGet(
     return { ...serviceWorkerResponse, attemptedTransports: ['service-worker'] }
   }
 
-  const pageResponse = await fetchFromMainWorld(tabId, normalizedPath, normalizedTimeout)
+  activeRequest.route = 'main-world'
+  if (activeRequest.cancelled) {
+    return {
+      ...createFailure('main-world', 'timeout'),
+      attemptedTransports: ['service-worker', 'main-world'],
+    }
+  }
+
+  const pageResponse = await fetchFromMainWorld(
+    tabId,
+    origin,
+    normalizedPath,
+    normalizedTimeout,
+    requestId,
+  )
   if (pageResponse.error !== undefined && serviceWorkerResponse.status > 0) {
     return {
       ...serviceWorkerResponse,
@@ -254,6 +193,63 @@ async function executeTeamCityGet(
   return {
     ...pageResponse,
     attemptedTransports: ['service-worker', 'main-world'],
+  }
+}
+
+async function executeTrackedTeamCityGet(
+  requestId: string,
+  path: string,
+  sender: chrome.runtime.MessageSender,
+  timeoutMs: number | undefined,
+): Promise<TeamCityRawResponse> {
+  const tabId = sender.tab?.id
+  if (tabId === undefined || activeTeamCityRequests.has(requestId)) {
+    return createFailure(
+      'service-worker',
+      tabId === undefined ? 'tab-unavailable' : 'invalid-request',
+    )
+  }
+
+  const activeRequest: ActiveTeamCityRequest = {
+    tabId,
+    route: 'service-worker',
+    cancelled: false,
+  }
+  activeTeamCityRequests.set(requestId, activeRequest)
+
+  try {
+    return await executeTeamCityGet(requestId, path, sender, timeoutMs, activeRequest)
+  } finally {
+    if (activeTeamCityRequests.get(requestId) === activeRequest) {
+      activeTeamCityRequests.delete(requestId)
+    }
+  }
+}
+
+async function cancelTeamCityRequest(
+  requestId: string,
+  sender: chrome.runtime.MessageSender,
+): Promise<void> {
+  const activeRequest = activeTeamCityRequests.get(requestId)
+  if (activeRequest === undefined || sender.tab?.id !== activeRequest.tabId) {
+    return
+  }
+
+  activeRequest.cancelled = true
+  if (activeRequest.route === 'service-worker') {
+    abortBoundedTeamCityRequest(requestId)
+    return
+  }
+
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: activeRequest.tabId },
+      world: 'MAIN',
+      args: [requestId],
+      func: abortBoundedTeamCityRequest,
+    })
+  } catch {
+    // The page may have closed while its request was being cancelled.
   }
 }
 
@@ -308,6 +304,13 @@ chrome.action.onClicked.addListener(async (tab) => {
 })
 
 chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
+  if (isTeamCityCancelRequest(message)) {
+    void cancelTeamCityRequest(message.requestId, sender)
+      .then(() => sendResponse({ ok: true }))
+      .catch(() => sendResponse({ ok: false }))
+    return true
+  }
+
   if (isOpenTeamCityArtifactRequest(message)) {
     void openTeamCityArtifactTab(message.contentHref, sender)
       .then(sendResponse)
@@ -326,7 +329,7 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
     return false
   }
 
-  void executeTeamCityGet(message.path, sender, message.timeoutMs)
+  void executeTrackedTeamCityGet(message.requestId, message.path, sender, message.timeoutMs)
     .then(sendResponse)
     .catch(() => sendResponse(createFailure('service-worker', 'network')))
 

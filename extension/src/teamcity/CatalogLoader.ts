@@ -14,6 +14,7 @@ export interface BuildConfiguration {
 
 export interface CatalogResult {
   configurations: BuildConfiguration[]
+  skippedConfigurations: number
   transport: TeamCityTransportKind
 }
 
@@ -47,6 +48,7 @@ function parseBuildConfiguration(value: unknown): BuildConfiguration | undefined
 
 export async function loadBuildConfigurations(client: TeamCityHttpClient): Promise<CatalogResult> {
   const configurations = new Map<string, BuildConfiguration>()
+  let skippedConfigurations = 0
   let nextPath: string | undefined = catalogPath
   let transport: TeamCityTransportKind = 'service-worker'
 
@@ -59,10 +61,16 @@ export async function loadBuildConfigurations(client: TeamCityHttpClient): Promi
       throw new TeamCityError('UnexpectedResponse', 'TeamCity build types response is invalid.')
     }
 
+    if (!Array.isArray(root.buildType)) {
+      throw new TeamCityError('UnexpectedResponse', 'TeamCity build types list is invalid.')
+    }
+
     for (const item of readArray(root.buildType)) {
       const configuration = parseBuildConfiguration(item)
       if (configuration !== undefined) {
         configurations.set(configuration.id, configuration)
+      } else {
+        skippedConfigurations += 1
       }
     }
 
@@ -74,11 +82,16 @@ export async function loadBuildConfigurations(client: TeamCityHttpClient): Promi
     throw new TeamCityError('TraversalLimitExceeded', 'TeamCity catalog pagination limit was exceeded.')
   }
 
+  if (configurations.size === 0 && skippedConfigurations > 0) {
+    throw new TeamCityError('UnexpectedResponse', 'TeamCity build types are invalid.')
+  }
+
   return {
     configurations: [...configurations.values()].sort(
       (left, right) =>
         left.projectName.localeCompare(right.projectName) || left.name.localeCompare(right.name),
     ),
+    skippedConfigurations,
     transport,
   }
 }

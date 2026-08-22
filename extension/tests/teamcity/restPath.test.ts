@@ -4,7 +4,7 @@ import {
   normalizeTeamCityRestPath,
   toRestPath,
   toTrustedTeamCityUrl,
-} from './restPath'
+} from '../../src/teamcity/restPath'
 
 describe('TeamCity URL validation', () => {
   it('creates a same-origin TeamCity build page URL from an opaque build ID', () => {

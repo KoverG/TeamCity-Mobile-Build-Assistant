@@ -194,6 +194,46 @@
   font-weight: 700;
 }
 
+.tcba-results__state-stack {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+  padding-top: 8px;
+}
+
+.tcba-results-warning {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 10px;
+  color: #694800;
+  background: #fff7df;
+  border: 1px solid #e6b94f;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.tcba-results-warning > span {
+  min-width: 0;
+}
+
+.tcba-results-warning > button {
+  flex: 0 0 auto;
+  padding: 2px 0;
+  color: #694800;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .tcba-results__viewport {
   position: absolute;
   inset-block: 33px 51px;
@@ -212,6 +252,12 @@
   overflow-x: hidden;
   overflow-y: auto;
 }
+.tcba-results__list > .tcba-results-warning {
+  position: sticky;
+  z-index: 4;
+  top: 0;
+}
+
 
 .tcba-results__scrollbar {
   position: absolute;
@@ -512,6 +558,11 @@
   background: #c51d43;
 }
 
+.tcba-toast--neutral {
+  background: #7e7e7e;
+  box-shadow: 0 6px 18px rgb(80 80 80 / 25%);
+}
+
 .tcba-toast svg {
   width: 18px;
   height: 18px;
@@ -535,7 +586,8 @@
 .tcba-action-button:focus-visible,
 .tcba-build-card__number:focus-visible,
 .tcba-build-card__select:focus-visible,
-.tcba-results-error > button:focus-visible {
+.tcba-results-error > button:focus-visible,
+.tcba-results-warning > button:focus-visible {
   outline: 3px solid var(--tcba-color-focus);
   outline-offset: 2px;
 }

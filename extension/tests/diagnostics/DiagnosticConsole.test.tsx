@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { DiagnosticConsole } from './DiagnosticConsole'
-import { DiagnosticEventStore } from './DiagnosticEventStore'
+import { DiagnosticConsole } from '../../src/diagnostics/DiagnosticConsole'
+import { DiagnosticEventStore } from '../../src/diagnostics/DiagnosticEventStore'
 
 afterEach(cleanup)
 

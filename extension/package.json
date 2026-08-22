@@ -1,7 +1,7 @@
 {
   "name": "teamcity-mobile-build-assistant-extension",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.2.1",
   "type": "module",
   "scripts": {
     "dev:content": "vite build --watch --mode development --config vite.content.config.ts --configLoader native",
@@ -13,7 +13,7 @@
     "build:content:production": "vite build --config vite.content.config.ts --configLoader native",
     "build:background": "vite build --mode diagnostic --config vite.background.config.ts --configLoader native",
     "build:background:production": "vite build --config vite.background.config.ts --configLoader native",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json --pretty false && tsc --noEmit -p tsconfig.node.json --pretty false",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json --pretty false && tsc --noEmit -p tsconfig.node.json --pretty false && tsc --noEmit -p tsconfig.tests.json --pretty false",
     "lint": "eslint .",
     "test": "vitest --configLoader native",
     "test:run": "vitest run --configLoader native"

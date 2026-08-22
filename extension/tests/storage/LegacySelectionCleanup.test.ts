@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ChromeLegacySelectionCleanup } from './LegacySelectionCleanup'
+import { ChromeLegacySelectionCleanup } from '../../src/storage/LegacySelectionCleanup'
 
 const remove = vi.fn().mockResolvedValue(undefined)
 

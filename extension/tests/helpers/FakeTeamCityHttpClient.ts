@@ -2,7 +2,7 @@ import type {
   TeamCityHttpClient,
   TeamCityJsonResult,
   TeamCityRequestOptions,
-} from '../teamcity/TeamCityTransport'
+} from '../../src/teamcity/TeamCityTransport'
 
 export class FakeTeamCityHttpClient implements TeamCityHttpClient {
   public readonly requestedPaths: string[] = []

@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { FakeTeamCityHttpClient } from '../test/FakeTeamCityHttpClient'
+import { FakeTeamCityHttpClient } from '../helpers/FakeTeamCityHttpClient'
 import {
   createArtifactBulkPath,
   createArtifactRootPath,
   createRepositoryDownloadPath,
   resolveMobileArtifact,
-} from './ArtifactResolver'
+} from '../../src/teamcity/ArtifactResolver'
 import type {
   TeamCityHttpClient,
   TeamCityJsonResult,
   TeamCityRequestOptions,
-} from './TeamCityTransport'
+} from '../../src/teamcity/TeamCityTransport'
 
 function metadataPath(href: string): string {
   const fields =

@@ -3,7 +3,7 @@ import {
   BuildConfigurationClassifier,
   classifyBuildConfigurations,
   type BuildConfigurationClassifierProfile,
-} from './BuildConfigurationClassifier'
+} from '../../src/teamcity/BuildConfigurationClassifier'
 
 const baseConfiguration = {
   projectId: 'SyntheticProject',

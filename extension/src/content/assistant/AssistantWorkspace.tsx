@@ -106,6 +106,11 @@ export function AssistantWorkspace({ id, origin, controller, onClose }: Assistan
     void controller.search()
   }
 
+  function stopSearch() {
+    controller.stopSearch()
+    setToast({ message: 'Поиск остановлен', tone: 'neutral' })
+  }
+
   function updateResultsOpen(nextOpen: boolean) {
     if (resultsOpen && !nextOpen) {
       setResultsSession((session) => session + 1)
@@ -195,6 +200,7 @@ export function AssistantWorkspace({ id, origin, controller, onClose }: Assistan
             status={controller.state.searchStatus}
             hasSearched={controller.state.hasSearched}
             errorMessage={controller.state.searchErrorMessage}
+            warningMessage={controller.state.searchWarningMessage}
             matches={controller.state.matches}
             selectedBuildIds={controller.state.selectedBuildIds}
             toast={toast}
@@ -206,7 +212,7 @@ export function AssistantWorkspace({ id, origin, controller, onClose }: Assistan
           />
         </div>
       </div>
-      <AssistantPanel id={id} controller={controller} onSearch={search} onClose={onClose} />
+      <AssistantPanel id={id} controller={controller} onSearch={search} onStopSearch={stopSearch} onClose={onClose} />
       <button
         className="tcba-results-handle"
         type="button"

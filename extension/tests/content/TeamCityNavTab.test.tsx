@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { LauncherStorage } from '../storage/LauncherStorage'
-import { TeamCityNavTab } from './TeamCityNavTab'
+import type { LauncherStorage } from '../../src/storage/LauncherStorage'
+import { TeamCityNavTab } from '../../src/content/TeamCityNavTab'
 
 function rectangle(left: number, top: number, width: number, height: number): DOMRect {
   return {

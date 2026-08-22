@@ -2,8 +2,14 @@ export type TeamCityTransportKind = 'service-worker' | 'main-world'
 
 export interface TeamCityGetRequest {
   type: 'teamcity:get'
+  requestId: string
   path: string
   timeoutMs?: number
+}
+
+export interface TeamCityCancelRequest {
+  type: 'teamcity:cancel'
+  requestId: string
 }
 
 export interface OpenTeamCityBuildRequest {
@@ -43,10 +49,24 @@ export function isTeamCityGetRequest(value: unknown): value is TeamCityGetReques
   const request = value as Partial<TeamCityGetRequest>
   return (
     request.type === 'teamcity:get' &&
+    isTeamCityRequestId(request.requestId) &&
     typeof request.path === 'string' &&
     (request.timeoutMs === undefined ||
       (typeof request.timeoutMs === 'number' && Number.isFinite(request.timeoutMs)))
   )
+}
+
+export function isTeamCityCancelRequest(value: unknown): value is TeamCityCancelRequest {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const request = value as Partial<TeamCityCancelRequest>
+  return request.type === 'teamcity:cancel' && isTeamCityRequestId(request.requestId)
+}
+
+function isTeamCityRequestId(value: unknown): value is string {
+  return typeof value === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(value)
 }
 
 export function isOpenTeamCityBuildRequest(value: unknown): value is OpenTeamCityBuildRequest {

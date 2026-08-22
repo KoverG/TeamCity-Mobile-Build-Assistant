@@ -1,14 +1,14 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { LegacySelectionCleanup } from '../storage/LegacySelectionCleanup'
-import type { SearchHistoryStorage } from '../storage/SearchHistoryStorage'
-import type { TeamCityService } from '../teamcity/TeamCityService'
-import { TeamCityError } from '../teamcity/TeamCityError'
+import type { LegacySelectionCleanup } from '../../src/storage/LegacySelectionCleanup'
+import type { SearchHistoryStorage } from '../../src/storage/SearchHistoryStorage'
+import type { TeamCityService } from '../../src/teamcity/TeamCityService'
+import { TeamCityError } from '../../src/teamcity/TeamCityError'
 import {
   createAdditionalActionsService,
   type AdditionalActionsGateway,
-} from '../additional-actions/AdditionalActionsService'
-import { App } from './App'
+} from '../../src/additional-actions/AdditionalActionsService'
+import { App } from '../../src/content/App'
 
 afterEach(() => {
   cleanup()
@@ -42,6 +42,7 @@ function createService(): TeamCityService {
           paused: false,
         },
       ],
+      skippedConfigurations: 0,
       transport: 'main-world',
     }),
     loadBuilds: vi.fn(async (buildTypeIds: readonly string[]) => ({
@@ -55,6 +56,7 @@ function createService(): TeamCityService {
           finishDate: '20260811T101500+0000',
         },
       ],
+      failedConfigurations: 0,
       transport: 'main-world' as const,
     })),
     resolveArtifact: vi.fn().mockResolvedValue({
@@ -136,9 +138,67 @@ describe('App', () => {
           paused: false,
         },
       ],
+      skippedConfigurations: 0,
       transport: 'main-world',
     })
     await waitFor(() => expect(projectCombobox).not.toBeDisabled())
+  })
+
+  it('keeps valid projects available and shows a yellow warning for a partial catalog', async () => {
+    const service = createService()
+    vi.mocked(service.loadCatalog).mockResolvedValue({
+      configurations: [
+        {
+          id: 'Synthetic_Mobile_android_stage',
+          name: 'Android Stage',
+          projectId: 'Synthetic_Mobile',
+          projectName: 'Synthetic Mobile',
+          paused: false,
+        },
+      ],
+      skippedConfigurations: 2,
+      transport: 'main-world',
+    })
+    render(
+      <App
+        service={service}
+        legacySelectionCleanup={createStorage()}
+        origin="https://teamcity.example.test"
+      />,
+    )
+
+    await openAssistant()
+
+    const warning = await screen.findByRole('status')
+    expect(warning).toHaveTextContent(
+      'Каталог загружен не полностью: пропущено конфигураций — 2.',
+    )
+    expect(warning).toHaveClass('tcba-assistant__warning')
+    selectComboboxOption('Проект', 'Synthetic Mobile')
+    expect(screen.getByRole('combobox', { name: 'Проект' })).toHaveTextContent(
+      'Synthetic Mobile',
+    )
+  })
+
+  it('shows the regular catalog error when no valid catalog data remains', async () => {
+    const service = createService()
+    vi.mocked(service.loadCatalog).mockRejectedValue(
+      new TeamCityError('UnexpectedResponse', 'Synthetic invalid catalog.'),
+    )
+    render(
+      <App
+        service={service}
+        legacySelectionCleanup={createStorage()}
+        origin="https://teamcity.example.test"
+      />,
+    )
+
+    await openAssistant()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'TeamCity вернул ответ неизвестного формата.',
+    )
+    expect(screen.getByRole('button', { name: 'Повторить' })).toBeInTheDocument()
   })
 
   it('shows the result badge immediately and opens the hello state before the first search', async () => {
@@ -212,7 +272,7 @@ describe('App', () => {
     ))
   })
 
-  it('stops an active search and shows the empty-result state', async () => {
+  it('stops an empty search and shows the regular state with a neutral popup', async () => {
     const service = createService()
     let finishLoading: ((value: Awaited<ReturnType<TeamCityService['loadBuilds']>>) => void) | undefined
     vi.mocked(service.loadBuilds).mockImplementation(() => new Promise((resolve) => {
@@ -238,9 +298,83 @@ describe('App', () => {
 
     expect(screen.queryByRole('button', { name: 'Остановить поиск сборок' })).not.toBeInTheDocument()
     expect(screen.getByText('Не удалось найти сборки')).toBeInTheDocument()
+    const stoppedToast = (await screen.findByText('Поиск остановлен')).closest('.tcba-toast')
+    expect(stoppedToast).toHaveClass('tcba-toast--neutral')
     expect(vi.mocked(service.loadBuilds).mock.calls[0]?.[1]?.signal).toHaveProperty('aborted', true)
-    finishLoading?.({ builds: [], transport: 'main-world' })
+    finishLoading?.({ builds: [], failedConfigurations: 0, transport: 'main-world' })
     await waitFor(() => expect(screen.getByText('Не удалось найти сборки')).toBeInTheDocument())
+  })
+
+  it('keeps completed results visible when the search is stopped', async () => {
+    const service = createService()
+    vi.mocked(service.loadBuilds).mockResolvedValue({
+      builds: [
+        {
+          id: 'found',
+          buildTypeId: 'Synthetic_Mobile_android_stage',
+          number: '42',
+          branchName: 'feature/found',
+          defaultBranch: false,
+          finishDate: '20260811T101500+0000',
+        },
+        {
+          id: 'pending',
+          buildTypeId: 'Synthetic_Mobile_android_stage',
+          number: '43',
+          branchName: 'feature/pending',
+          defaultBranch: false,
+          finishDate: '20260811T101600+0000',
+        },
+      ],
+      failedConfigurations: 0,
+      transport: 'main-world',
+    })
+    const artifactResolution: Awaited<ReturnType<TeamCityService['resolveArtifact']>> = {
+      status: 'Resolved',
+      candidates: [{
+        name: 'synthetic-mobile.apk',
+        fullName: 'artifacts/synthetic-mobile.apk',
+        contentHref: '/repository/download/synthetic/mobile.apk',
+        size: 136_681_472,
+      }],
+      transport: 'main-world',
+      diagnostics: {
+        strategy: 'bulk',
+        requestCount: 1,
+        visitedNodes: 1,
+        bulkExpandedArchives: false,
+      },
+    }
+    let finishPending: ((value: typeof artifactResolution) => void) | undefined
+    vi.mocked(service.resolveArtifact).mockImplementation((buildId) => (
+      buildId === 'found'
+        ? Promise.resolve(artifactResolution)
+        : new Promise((resolve) => {
+            finishPending = resolve
+          })
+    ))
+    render(
+      <App
+        service={service}
+        legacySelectionCleanup={createStorage()}
+        origin="https://teamcity.example.test"
+      />,
+    )
+
+    await openAssistant()
+    selectComboboxOption('Проект', 'Synthetic Mobile')
+    fireEvent.click(screen.getByRole('button', { name: 'Поиск сборок' }))
+    await waitFor(() => expect(service.resolveArtifact).toHaveBeenCalledTimes(2))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Остановить поиск сборок' }))
+
+    expect(await screen.findByRole('button', { name: 'Открыть билд #42 в TeamCity' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Открыть билд #43 в TeamCity' })).not.toBeInTheDocument()
+    expect(screen.getByText('Найдены сборки:').parentElement).toHaveTextContent('1')
+    const stoppedToast = screen.getByText('Поиск остановлен').closest('.tcba-toast')
+    expect(stoppedToast).toHaveClass('tcba-toast--neutral')
+
+    finishPending?.(artifactResolution)
   })
 
   it('searches the selected platform and renders only the resolved artifact card', async () => {
@@ -293,6 +427,145 @@ describe('App', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Обновить список проектов' }))
     await waitFor(() => expect(service.loadCatalog).toHaveBeenCalledTimes(2))
+  })
+
+  it('keeps found builds and warns when some configurations could not be loaded', async () => {
+    const service = createService()
+    vi.mocked(service.loadBuilds).mockResolvedValue({
+      builds: [{
+        id: 'partial-result',
+        buildTypeId: 'Synthetic_Mobile_android_stage',
+        number: '42',
+        branchName: 'feature/partial-result',
+        defaultBranch: false,
+        finishDate: '20260811T101500+0000',
+      }],
+      failedConfigurations: 1,
+      transport: 'main-world',
+    })
+    render(
+      <App
+        service={service}
+        legacySelectionCleanup={createStorage()}
+        origin="https://teamcity.example.test"
+      />,
+    )
+
+    await openAssistant()
+    selectComboboxOption('Проект', 'Synthetic Mobile')
+    fireEvent.click(screen.getByRole('button', { name: 'Поиск сборок' }))
+
+    expect(await screen.findByRole('button', {
+      name: 'Открыть билд #42 в TeamCity',
+    })).toBeVisible()
+    const warning = screen.getByRole('status')
+    expect(warning).toHaveTextContent(
+      'Результаты могут быть неполными: не удалось загрузить конфигураций — 1.',
+    )
+    expect(warning).toHaveClass('tcba-results-warning')
+    expect(screen.getByRole('button', { name: 'Повторить' })).toBeInTheDocument()
+  })
+
+  it('shows Other only for unclassified configurations and detects the artifact platform', async () => {
+    const service = createService()
+    vi.mocked(service.resolveArtifact).mockImplementation(
+      async (_buildId: string, _buildTypeId: string, platform) => {
+        if (platform === 'android') {
+          return {
+            status: 'NotFound',
+            candidates: [],
+            transport: 'main-world',
+            diagnostics: {
+              strategy: 'bulk',
+              requestCount: 1,
+              visitedNodes: 0,
+              bulkExpandedArchives: false,
+            },
+          }
+        }
+        return {
+          status: 'Resolved',
+          candidates: [{
+            name: 'synthetic-mobile.ipa',
+            fullName: 'artifacts/synthetic-mobile.ipa',
+            contentHref: '/repository/download/synthetic/mobile.ipa',
+          }],
+          transport: 'main-world',
+          diagnostics: {
+            strategy: 'bulk',
+            requestCount: 1,
+            visitedNodes: 1,
+            bulkExpandedArchives: false,
+          },
+        }
+      },
+    )
+    render(
+      <App
+        service={service}
+        legacySelectionCleanup={createStorage()}
+        origin="https://teamcity.example.test"
+      />,
+    )
+
+    await openAssistant()
+    expect(screen.queryByRole('button', { name: /Другие/ })).not.toBeInTheDocument()
+
+    selectComboboxOption('Проект', 'Synthetic Mobile')
+    expect(screen.queryByRole('button', { name: /Другие/ })).not.toBeInTheDocument()
+
+    selectComboboxOption('Проект', 'Synthetic Custom')
+    const otherButton = screen.getByRole('button', { name: /Другие/ })
+    expect(otherButton).toHaveAttribute(
+      'title',
+      'Конфигурации с нераспознанной платформой',
+    )
+    fireEvent.click(otherButton)
+    expect(otherButton).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Поиск сборок' }))
+    await screen.findByText('Custom pipeline')
+
+    expect(service.loadBuilds).toHaveBeenCalledWith(
+      ['Synthetic_Custom_Pipeline'],
+      expect.objectContaining({ maximumBuilds: 20 }),
+    )
+    expect(service.resolveArtifact).toHaveBeenNthCalledWith(
+      1,
+      '12345',
+      'Synthetic_Custom_Pipeline',
+      'android',
+      expect.objectContaining({ requestTimeoutMs: 30_000 }),
+    )
+    expect(service.resolveArtifact).toHaveBeenNthCalledWith(
+      2,
+      '12345',
+      'Synthetic_Custom_Pipeline',
+      'ios',
+      expect.objectContaining({ requestTimeoutMs: 30_000 }),
+    )
+    expect(screen.getByText('ipa')).toBeInTheDocument()
+  })
+  it('warns instead of guessing when Other contains multiple matching artifacts', async () => {
+    const service = createService()
+    render(
+      <App
+        service={service}
+        legacySelectionCleanup={createStorage()}
+        origin="https://teamcity.example.test"
+      />,
+    )
+
+    await openAssistant()
+    selectComboboxOption('Проект', 'Synthetic Custom')
+    fireEvent.click(screen.getByRole('button', { name: /Другие/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Поиск сборок' }))
+
+    expect(await screen.findByText(
+      'Неоднозначные результаты: несколько подходящих артефактов найдено в 1 из 1 проверок.',
+    )).toBeInTheDocument()
+    expect(screen.queryByText('Custom pipeline')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Повторить' })).toBeInTheDocument()
   })
 
   it('loads toolbar and result actions once and executes them through the shared service', async () => {
@@ -511,7 +784,7 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Остановить поиск сборок' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Закрыть панель' }))
-    finishLoading?.({ builds: [], transport: 'main-world' })
+    finishLoading?.({ builds: [], failedConfigurations: 0, transport: 'main-world' })
     await waitFor(() => expect(historyStorage.save).toHaveBeenCalledWith(
       'https://teamcity.example.test',
       { task: ['TASK-NEW', 'TASK-5'], build: [] },

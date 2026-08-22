@@ -1,5 +1,6 @@
 import {
   isTeamCityRawResponse,
+  type TeamCityCancelRequest,
   type TeamCityGetRequest,
   type TeamCityRawResponse,
   type TeamCityTransportKind,
@@ -53,6 +54,17 @@ function notifyObserver(callback: (() => void) | undefined): void {
   } catch {
     // Observability must never affect the TeamCity request.
   }
+}
+
+let fallbackRequestSequence = 0
+
+function createTeamCityRequestId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+
+  fallbackRequestSequence += 1
+  return `request_${Date.now().toString(36)}_${fallbackRequestSequence.toString(36)}`
 }
 
 export function parseTeamCityResponse<T>(response: TeamCityRawResponse): TeamCityJsonResult<T> {
@@ -128,8 +140,10 @@ export class BrowserSessionTeamCityTransport implements TeamCityHttpClient {
     }
     notifyObserver(() => this.observer?.requestStarted?.(requestEvent))
 
+    const requestId = createTeamCityRequestId()
     const request: TeamCityGetRequest = {
       type: 'teamcity:get',
+      requestId,
       path,
       timeoutMs: options.timeoutMs,
     }
@@ -138,11 +152,35 @@ export class BrowserSessionTeamCityTransport implements TeamCityHttpClient {
       const rawResponse: unknown = options.signal === undefined
         ? await responsePromise
         : await new Promise((resolve, reject) => {
-            const abort = () => reject(new TeamCityError('RequestTimeout', 'TeamCity request was aborted.'))
+            let settled = false
+            const abort = () => {
+              if (settled) {
+                return
+              }
+
+              settled = true
+              const cancelRequest: TeamCityCancelRequest = {
+                type: 'teamcity:cancel',
+                requestId,
+              }
+              void chrome.runtime.sendMessage(cancelRequest).catch(() => undefined)
+              reject(new TeamCityError('RequestTimeout', 'TeamCity request was aborted.'))
+            }
             options.signal?.addEventListener('abort', abort, { once: true })
-            void responsePromise.then(resolve, reject).finally(() => {
-              options.signal?.removeEventListener('abort', abort)
-            })
+            void responsePromise.then(
+              (value) => {
+                if (!settled) {
+                  settled = true
+                  resolve(value)
+                }
+              },
+              (error: unknown) => {
+                if (!settled) {
+                  settled = true
+                  reject(error)
+                }
+              },
+            ).finally(() => options.signal?.removeEventListener('abort', abort))
           })
 
       if (!isTeamCityRawResponse(rawResponse)) {

@@ -2,7 +2,7 @@
 
 - Статус: согласованная архитектурная база
 - Дата фиксации: 2026-08-08
-- Последнее обновление: 2026-08-22 (версия 1.2.0)
+- Последнее обновление: 2026-08-22 (версия 1.2.1)
 
 Связанные документы:
 
@@ -108,6 +108,20 @@ extension/src/
 └── background/
 ```
 
+```text
+extension/tests/
+├── additional-actions/
+├── background/
+├── content/
+├── diagnostics/
+├── storage/
+├── teamcity/
+├── helpers/
+└── setup.ts
+```
+
+Production-слой `extension/src` не содержит test suites, test fixtures и зависимостей от Vitest. Тесты зеркалят прикладные домены в `extension/tests`, используют только синтетические данные и компилируются отдельной конфигурацией `tsconfig.tests.json`.
+
 Зависимости направлены внутрь:
 
 ```text
@@ -139,6 +153,7 @@ Extension запрашивает `optional_host_permission` только пос�
 - принимают только HTTPS origin текущей вкладки;
 - разрешают только нормализованные TeamCity REST paths;
 - имеют timeout и лимит размера ответа;
+- получают уникальный request ID и по команде отмены прерывают активный service-worker или MAIN-world запрос;
 - не читают и не пересылают cookie вручную;
 - возвращают стабильные application errors вместо raw исключений.
 

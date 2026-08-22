@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { TeamCityRawResponse } from './contracts'
+import type { TeamCityRawResponse } from '../../src/teamcity/contracts'
 import {
   BrowserSessionTeamCityTransport,
   parseTeamCityResponse,
-} from './TeamCityTransport'
+} from '../../src/teamcity/TeamCityTransport'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -76,6 +76,7 @@ describe('BrowserSessionTeamCityTransport', () => {
     })
     expect(sendMessage).toHaveBeenCalledWith({
       type: 'teamcity:get',
+      requestId: expect.any(String),
       path,
       timeoutMs: 15_000,
     })
@@ -90,5 +91,40 @@ describe('BrowserSessionTeamCityTransport', () => {
       transportRoute: 'service-worker → main-world',
     }))
     expect(observer.requestFailed).not.toHaveBeenCalled()
+  })
+
+  it('cancels the background request and ignores a late response', async () => {
+    let resolveRequest: ((value: TeamCityRawResponse) => void) | undefined
+    const pendingResponse = new Promise<TeamCityRawResponse>((resolve) => {
+      resolveRequest = resolve
+    })
+    const sendMessage = vi.fn((message: { type: string; requestId?: string }) => (
+      message.type === 'teamcity:get' ? pendingResponse : Promise.resolve({ ok: true })
+    ))
+    vi.stubGlobal('chrome', { runtime: { sendMessage } })
+    const observer = {
+      responseReceived: vi.fn(),
+      requestFailed: vi.fn(),
+    }
+    const controller = new AbortController()
+    const transport = new BrowserSessionTeamCityTransport(observer)
+    const requestPromise = transport.getJson('/app/rest/buildTypes', {
+      signal: controller.signal,
+    })
+
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1))
+    const getRequest = sendMessage.mock.calls[0]?.[0] as unknown as { requestId: string }
+    controller.abort()
+
+    await expect(requestPromise).rejects.toMatchObject({ code: 'RequestTimeout' })
+    expect(sendMessage).toHaveBeenNthCalledWith(2, {
+      type: 'teamcity:cancel',
+      requestId: getRequest.requestId,
+    })
+
+    resolveRequest?.(response())
+    await Promise.resolve()
+    expect(observer.responseReceived).not.toHaveBeenCalled()
+    expect(observer.requestFailed).toHaveBeenCalledTimes(1)
   })
 })

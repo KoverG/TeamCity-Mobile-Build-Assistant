@@ -48,7 +48,7 @@
 }
 
 .tcba-toolbar__extras--open {
-  width: 112px;
+  width: calc(var(--tcba-toolbar-extra-count) * 36px + 4px);
   pointer-events: auto;
 }
 
@@ -57,7 +57,7 @@
   top: 0;
   left: 4px;
   display: flex;
-  width: 104px;
+  width: calc(var(--tcba-toolbar-extra-count) * 36px - 4px);
   gap: 4px;
   opacity: 0;
   transform: scale(.96);

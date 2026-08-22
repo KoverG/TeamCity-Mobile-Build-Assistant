@@ -1,7 +1,7 @@
 import type { MobileEnvironment } from '../../teamcity/BuildConfigurationClassifier'
 import type { AssistantController } from './useAssistantController'
 import { Combobox } from './Combobox'
-import { LoadingIcon } from './Icons'
+import { LoadingIcon, StopIcon } from './Icons'
 import { PanelToolbar } from './PanelToolbar'
 import { PlatformFilter } from './PlatformFilter'
 import { SearchField } from './SearchField'
@@ -27,7 +27,7 @@ export function AssistantPanel({ id, controller, onSearch, onClose }: AssistantP
     <section id={id} className="tcba-assistant" aria-labelledby={`${id}-title`}>
       <h1 className="tcba-sr-only" id={`${id}-title`}>TeamCity Mobile Build Assistant</h1>
       <PanelToolbar
-        refreshEnabled={state.catalogStatus === 'ready'}
+        refreshEnabled={state.catalogStatus === 'ready' && !searching}
         loading={catalogLoading}
         onRefresh={() => void controller.loadCatalog()}
         onClose={onClose}
@@ -37,7 +37,7 @@ export function AssistantPanel({ id, controller, onSearch, onClose }: AssistantP
         <Combobox
           label="Проект"
           value={state.selectedProjectId}
-          placeholder={catalogLoading ? 'Загрузка проектов…' : 'Выберите проект'}
+          placeholder="Выберите проект"
           options={controller.projects.map((project) => ({ value: project.id, label: project.name }))}
           disabled={catalogLoading || searching || controller.projects.length === 0}
           onChange={controller.selectProject}
@@ -87,6 +87,17 @@ export function AssistantPanel({ id, controller, onSearch, onClose }: AssistantP
           {searching && <LoadingIcon className="tcba-search-button__loader" />}
           {searchButtonLabel}
         </button>
+        {searching && (
+          <button
+            className="tcba-stop-button"
+            type="button"
+            aria-label="Остановить поиск сборок"
+            title="Остановить поиск"
+            onClick={controller.stopSearch}
+          >
+            <StopIcon />
+          </button>
+        )}
       </div>
     </section>
   )

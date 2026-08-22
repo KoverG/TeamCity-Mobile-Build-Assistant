@@ -1,9 +1,13 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { SelectionStorage } from '../storage/SelectionStorage'
+import type { LegacySelectionCleanup } from '../storage/LegacySelectionCleanup'
 import type { SearchHistoryStorage } from '../storage/SearchHistoryStorage'
 import type { TeamCityService } from '../teamcity/TeamCityService'
 import { TeamCityError } from '../teamcity/TeamCityError'
+import {
+  createAdditionalActionsService,
+  type AdditionalActionsGateway,
+} from '../additional-actions/AdditionalActionsService'
 import { App } from './App'
 
 afterEach(() => {
@@ -74,13 +78,10 @@ function createService(): TeamCityService {
   }
 }
 
-function createStorage(remembered?: Awaited<ReturnType<SelectionStorage['load']>>): SelectionStorage & {
-  save: ReturnType<typeof vi.fn>
+function createStorage(): LegacySelectionCleanup & {
   clear: ReturnType<typeof vi.fn>
 } {
   return {
-    load: vi.fn().mockResolvedValue(remembered),
-    save: vi.fn().mockResolvedValue(undefined),
     clear: vi.fn().mockResolvedValue(undefined),
   }
 }
@@ -105,11 +106,46 @@ function selectComboboxOption(label: string, option: string) {
 }
 
 describe('App', () => {
+  it('keeps the regular project placeholder while the catalog is loading', async () => {
+    const service = createService()
+    let finishLoading: ((value: Awaited<ReturnType<TeamCityService['loadCatalog']>>) => void) | undefined
+    vi.mocked(service.loadCatalog).mockImplementation(() => new Promise((resolve) => {
+      finishLoading = resolve
+    }))
+    render(
+      <App
+        service={service}
+        legacySelectionCleanup={createStorage()}
+        origin="https://teamcity.example.test"
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Открыть Mobile Build Assistant' }))
+    const projectCombobox = screen.getByRole('combobox', { name: 'Проект' })
+    expect(projectCombobox).toBeDisabled()
+    expect(projectCombobox).toHaveTextContent('Выберите проект')
+    expect(screen.queryByText('Загрузка проектов…')).not.toBeInTheDocument()
+
+    finishLoading?.({
+      configurations: [
+        {
+          id: 'Synthetic_Mobile_android_stage',
+          name: 'Android Stage',
+          projectId: 'Synthetic_Mobile',
+          projectName: 'Synthetic Mobile',
+          paused: false,
+        },
+      ],
+      transport: 'main-world',
+    })
+    await waitFor(() => expect(projectCombobox).not.toBeDisabled())
+  })
+
   it('shows the result badge immediately and opens the hello state before the first search', async () => {
     render(
       <App
         service={createService()}
-        selectionStorage={createStorage()}
+        legacySelectionCleanup={createStorage()}
         origin="https://teamcity.example.test"
       />,
     )
@@ -130,7 +166,7 @@ describe('App', () => {
     render(
       <App
         service={service}
-        selectionStorage={createStorage()}
+        legacySelectionCleanup={createStorage()}
         searchHistoryStorage={historyStorage}
         origin="https://teamcity.example.test"
       />,
@@ -176,7 +212,7 @@ describe('App', () => {
     ))
   })
 
-  it('opens the result drawer and shows the waiting state while builds are searched', async () => {
+  it('stops an active search and shows the empty-result state', async () => {
     const service = createService()
     let finishLoading: ((value: Awaited<ReturnType<TeamCityService['loadBuilds']>>) => void) | undefined
     vi.mocked(service.loadBuilds).mockImplementation(() => new Promise((resolve) => {
@@ -185,7 +221,7 @@ describe('App', () => {
     render(
       <App
         service={service}
-        selectionStorage={createStorage()}
+        legacySelectionCleanup={createStorage()}
         origin="https://teamcity.example.test"
       />,
     )
@@ -197,9 +233,14 @@ describe('App', () => {
     expect(await screen.findByRole('button', { name: 'Поиск сборок…' })).toHaveAttribute('aria-busy', 'true')
     expect(screen.getByRole('button', { name: 'Скрыть результаты поиска' })).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByText('Ищем сборки...')).toBeInTheDocument()
+    const stopButton = screen.getByRole('button', { name: 'Остановить поиск сборок' })
+    fireEvent.click(stopButton)
 
+    expect(screen.queryByRole('button', { name: 'Остановить поиск сборок' })).not.toBeInTheDocument()
+    expect(screen.getByText('Не удалось найти сборки')).toBeInTheDocument()
+    expect(vi.mocked(service.loadBuilds).mock.calls[0]?.[1]?.signal).toHaveProperty('aborted', true)
     finishLoading?.({ builds: [], transport: 'main-world' })
-    expect(await screen.findByText('Не удалось найти сборки')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Не удалось найти сборки')).toBeInTheDocument())
   })
 
   it('searches the selected platform and renders only the resolved artifact card', async () => {
@@ -209,7 +250,7 @@ describe('App', () => {
     render(
       <App
         service={service}
-        selectionStorage={createStorage()}
+        legacySelectionCleanup={createStorage()}
         origin="https://teamcity.example.test"
       />,
     )
@@ -247,9 +288,84 @@ describe('App', () => {
     expect(selection).toHaveAttribute('aria-pressed', 'false')
     fireEvent.click(selection)
     expect(screen.getByRole('button', { name: 'Копировать' })).toBeInTheDocument()
+    expect(document.querySelector('.tcba-results__footer'))
+      .toHaveStyle('--tcba-results-action-count: 1')
 
     fireEvent.click(screen.getByRole('button', { name: 'Обновить список проектов' }))
     await waitFor(() => expect(service.loadCatalog).toHaveBeenCalledTimes(2))
+  })
+
+  it('loads toolbar and result actions once and executes them through the shared service', async () => {
+    const executeAction = vi.fn()
+      .mockResolvedValueOnce({ status: 'completed' })
+      .mockResolvedValueOnce({ status: 'failed' })
+    const gateway: AdditionalActionsGateway = {
+      loadActions: vi.fn().mockResolvedValue([
+        {
+          id: 'toolbar-action',
+          placement: 'assistant-toolbar',
+          label: 'Быстрое действие',
+          tooltip: 'Выполнить дополнительное действие',
+          icon: 'action',
+          context: 'none',
+        },
+        {
+          id: 'share-builds',
+          placement: 'build-results',
+          label: 'Поделиться',
+          tooltip: 'Передать выбранные сборки',
+          icon: 'share',
+          context: 'build-selection',
+        },
+      ]),
+      executeAction,
+    }
+    render(
+      <App
+        service={createService()}
+        legacySelectionCleanup={createStorage()}
+        additionalActionsService={createAdditionalActionsService(gateway)}
+        origin="https://teamcity.example.test"
+      />,
+    )
+
+    await openAssistant()
+    fireEvent.click(screen.getByRole('button', { name: 'Открыть настройки' }))
+    const toolbarAction = await screen.findByRole('button', { name: 'Быстрое действие' })
+    expect(toolbarAction.closest('.tcba-toolbar__extras'))
+      .toHaveStyle('--tcba-toolbar-extra-count: 3')
+    fireEvent.click(toolbarAction)
+    await waitFor(() => expect(executeAction).toHaveBeenCalledTimes(1))
+    expect(screen.getByRole('button', { name: 'Готово: Быстрое действие' })).toBeInTheDocument()
+
+    selectComboboxOption('Проект', 'Synthetic Mobile')
+    fireEvent.click(screen.getByRole('button', { name: 'Поиск сборок' }))
+    await screen.findByText('Android Stage')
+    const resultAction = screen.getByRole('button', { name: 'Поделиться' })
+    expect(resultAction.closest('.tcba-results__footer'))
+      .toHaveStyle('--tcba-results-action-count: 2')
+    expect(resultAction).toBeDisabled()
+    fireEvent.click(resultAction)
+    expect(executeAction).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Выбрать сборку #42' }))
+    expect(resultAction).toBeEnabled()
+    fireEvent.click(resultAction)
+
+    await waitFor(() => expect(executeAction).toHaveBeenCalledTimes(2))
+    expect(executeAction).toHaveBeenLastCalledWith(expect.objectContaining({
+      actionId: 'share-builds',
+      placement: 'build-results',
+      context: {
+        type: 'build-selection',
+        builds: [expect.objectContaining({
+          buildId: '12345',
+          buildNumber: '42',
+          artifactHref: '/repository/download/synthetic/mobile.ipa',
+        })],
+      },
+    }))
+    expect(screen.getByRole('button', { name: 'Ошибка' })).toBeInTheDocument()
+    expect(gateway.loadActions).toHaveBeenCalledTimes(1)
   })
 
   it('retries a failed artifact search as a complete build search', async () => {
@@ -276,7 +392,7 @@ describe('App', () => {
     render(
       <App
         service={service}
-        selectionStorage={createStorage()}
+        legacySelectionCleanup={createStorage()}
         origin="https://teamcity.example.test"
       />,
     )
@@ -295,28 +411,22 @@ describe('App', () => {
     expect(service.loadCatalog).toHaveBeenCalledTimes(1)
   })
 
-  it('treats empty platform and environment as all and restores a remembered selection', async () => {
-    const storage = createStorage({
-      projectId: 'Synthetic_Mobile',
-      os: 'Android',
-      environment: 'Staging',
-    })
+  it('treats empty platform and environment as all and does not restore old filters', async () => {
+    const storage = createStorage()
     const service = createService()
     render(
       <App
         service={service}
-        selectionStorage={storage}
+        legacySelectionCleanup={storage}
         origin="https://teamcity.example.test"
       />,
     )
 
     await openAssistant()
-    expect(screen.getByRole('combobox', { name: 'Проект' })).toHaveTextContent('Synthetic Mobile')
-    expect(screen.getByRole('button', { name: 'Android' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('combobox', { name: 'Окружение' })).toHaveTextContent('Staging')
-
-    fireEvent.click(screen.getByRole('button', { name: 'Android' }))
-    expect(screen.getByRole('combobox', { name: 'Окружение' })).toHaveTextContent('Выберите окружение')
+    expect(screen.getByRole('combobox', { name: 'Проект' })).toHaveTextContent('Выберите проект')
+    expect(screen.getByRole('button', { name: 'Android' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: 'iOS' })).toHaveAttribute('aria-pressed', 'false')
+    selectComboboxOption('Проект', 'Synthetic Mobile')
     fireEvent.click(screen.getByRole('button', { name: 'Поиск сборок' }))
     await screen.findByText('Android Stage')
 
@@ -325,26 +435,19 @@ describe('App', () => {
       expect.objectContaining({ maximumBuilds: 20 }),
     )
     expect(screen.queryByText('Synthetic Custom')).not.toBeInTheDocument()
-    await waitFor(() => {
-      expect(storage.save).toHaveBeenCalledWith('https://teamcity.example.test', {
-        projectId: 'Synthetic_Mobile',
-        os: 'Unclassified',
-        environment: 'Unclassified',
-        searchMode: 'task',
-        taskQuery: '',
-        buildQuery: '',
-      })
-    })
+    expect(storage.clear).toHaveBeenCalledWith('https://teamcity.example.test')
   })
 
-  it('discards unsearched draft filters when the main panel closes', async () => {
+  it('resets the whole workspace on close and preserves only search history', async () => {
+    const service = createService()
+    const storage = createStorage()
     render(
       <App
-        service={createService()}
-        selectionStorage={createStorage({
-          projectId: 'Synthetic_Mobile',
-          os: 'Android',
-          environment: 'Staging',
+        service={service}
+        legacySelectionCleanup={storage}
+        searchHistoryStorage={createHistoryStorage({
+          task: ['TASK-5', 'TASK-4', 'TASK-3', 'TASK-2', 'TASK-1'],
+          build: ['105', '104', '103', '102', '101'],
         })}
         origin="https://teamcity.example.test"
       />,
@@ -353,11 +456,74 @@ describe('App', () => {
     await openAssistant()
     fireEvent.click(screen.getByRole('button', { name: 'iOS' }))
     expect(screen.getByRole('button', { name: 'iOS' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(screen.getByRole('button', { name: 'Показать результаты поиска' }))
+    expect(screen.getByRole('button', { name: 'Скрыть результаты поиска' })).toHaveAttribute('aria-expanded', 'true')
     fireEvent.click(screen.getByRole('button', { name: 'Закрыть панель' }))
     fireEvent.click(screen.getByRole('button', { name: 'Открыть Mobile Build Assistant' }))
 
-    expect(screen.getByRole('button', { name: 'Android' })).toHaveAttribute('aria-pressed', 'true')
+    await waitFor(() => expect(service.loadCatalog).toHaveBeenCalledTimes(2))
+    expect(storage.clear).toHaveBeenCalledWith('https://teamcity.example.test')
+    expect(screen.getByRole('combobox', { name: 'Проект' })).toHaveTextContent('Выберите проект')
+    expect(screen.getByRole('button', { name: 'Android' })).toHaveAttribute('aria-pressed', 'false')
     expect(screen.getByRole('button', { name: 'iOS' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: 'Показать результаты поиска' })).toHaveAttribute('aria-expanded', 'false')
+
+    const taskInput = screen.getByRole('textbox', { name: 'Поиск по номеру задачи' })
+    fireEvent.focus(taskInput)
+    expect(screen.getAllByRole('option').filter((option) => option.textContent?.startsWith('TASK-')))
+      .toHaveLength(5)
+  })
+
+  it('keeps a closed workspace while search is active and resets it after the search settles', async () => {
+    const service = createService()
+    const storage = createStorage()
+    const historyStorage = createHistoryStorage({ task: ['TASK-5'], build: [] })
+    let finishLoading: ((value: Awaited<ReturnType<TeamCityService['loadBuilds']>>) => void) | undefined
+    vi.mocked(service.loadBuilds).mockImplementation(() => new Promise((resolve) => {
+      finishLoading = resolve
+    }))
+    render(
+      <App
+        service={service}
+        legacySelectionCleanup={storage}
+        searchHistoryStorage={historyStorage}
+        origin="https://teamcity.example.test"
+      />,
+    )
+
+    await openAssistant()
+    selectComboboxOption('Проект', 'Synthetic Mobile')
+    fireEvent.change(screen.getByRole('textbox', { name: 'Поиск по номеру задачи' }), {
+      target: { value: 'TASK-NEW' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Поиск сборок' }))
+    await screen.findByRole('button', { name: 'Остановить поиск сборок' })
+    const refresh = screen.getByRole('button', { name: 'Обновить список проектов' })
+    expect(refresh).toBeDisabled()
+    fireEvent.click(refresh)
+    expect(service.loadCatalog).toHaveBeenCalledTimes(1)
+
+    const clearCountWhileSearching = storage.clear.mock.calls.length
+    fireEvent.click(screen.getByRole('button', { name: 'Закрыть панель' }))
+    expect(storage.clear).toHaveBeenCalledTimes(clearCountWhileSearching)
+    fireEvent.click(screen.getByRole('button', { name: 'Открыть Mobile Build Assistant' }))
+    expect(screen.getByRole('combobox', { name: 'Проект' })).toHaveTextContent('Synthetic Mobile')
+    expect(screen.getByRole('button', { name: 'Остановить поиск сборок' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Закрыть панель' }))
+    finishLoading?.({ builds: [], transport: 'main-world' })
+    await waitFor(() => expect(historyStorage.save).toHaveBeenCalledWith(
+      'https://teamcity.example.test',
+      { task: ['TASK-NEW', 'TASK-5'], build: [] },
+    ))
+    expect(storage.clear).toHaveBeenCalledTimes(clearCountWhileSearching)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Открыть Mobile Build Assistant' }))
+    await waitFor(() => expect(service.loadCatalog).toHaveBeenCalledTimes(2))
+    expect(screen.getByRole('combobox', { name: 'Проект' })).toHaveTextContent('Выберите проект')
+    expect(screen.getByRole('button', { name: 'Показать результаты поиска' })).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.focus(screen.getByRole('textbox', { name: 'Поиск по номеру задачи' }))
+    expect(screen.getByRole('option', { name: /^TASK-NEW/ })).toBeInTheDocument()
   })
 
   it('reveals the always-mounted download action on context menu without selecting the card', async () => {
@@ -366,7 +532,7 @@ describe('App', () => {
     render(
       <App
         service={createService()}
-        selectionStorage={createStorage()}
+        legacySelectionCleanup={createStorage()}
         origin="https://teamcity.example.test"
       />,
     )

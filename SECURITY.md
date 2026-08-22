@@ -11,7 +11,7 @@
 Проект не должен хранить:
 
 - TeamCity credentials или browser cookies;
-- Telegram bot/device tokens и webhook secrets;
+- access tokens, integration credentials и webhook secrets;
 - реальные TeamCity hosts, project/build IDs, branches и artifact paths;
 - runtime response bodies, HAR/netlog, screenshots и browser profiles;
 - production environment files и базы данных.

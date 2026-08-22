@@ -11,14 +11,15 @@ describe('content style boundaries', () => {
   const tokenStyles = readStyles('./tokens.css')
   const navTabStyles = readStyles('./TeamCityNavTab.css')
   const panelStyles = readStyles('./AssistantPanel.css')
+  const controlStyles = readStyles('./assistant/AssistantControls.css')
   const resultStyles = readStyles('./assistant/BuildResults.css')
   const assistantStyles = [
     panelStyles,
-    readStyles('./assistant/AssistantControls.css'),
+    controlStyles,
     resultStyles,
   ].join('\n')
   const diagnosticStyles = readStyles('../diagnostics/DiagnosticConsole.css')
-  const assistantOnlySelectors = /\.tcba-(assistant(?:\b|__|--)|assistant-workspace(?:\b|--)|toolbar(?:\b|__|--)|combobox(?:\b|__|--)|field-(?:dropdown|option)(?:\b|__|--)|platform(?:\b|__|--)|search-field(?:\b|__|--)|results(?:\b|__|--)|build-row(?:\b|__|--)|build-card(?:\b|__|--)|action-button(?:\b|--)|search-button(?:\b|--)|toast\b)/
+  const assistantOnlySelectors = /\.tcba-(assistant(?:\b|__|--)|assistant-workspace(?:\b|--)|toolbar(?:\b|__|--)|combobox(?:\b|__|--)|field-(?:dropdown|option)(?:\b|__|--)|platform(?:\b|__|--)|search-field(?:\b|__|--)|results(?:\b|__|--)|build-row(?:\b|__|--)|build-card(?:\b|__|--)|action-button(?:\b|--)|search-button(?:\b|--)|stop-button(?:\b|--)|toast\b)/
   const navTabOnlySelectors = /\.tcba-(shell(?:\b|--)|nav-tab(?:\b|__|--)|tab__(?:\w|-)+|launcher\b|panel-stack\b)/
 
   it('keeps component selectors out of shared tokens', () => {
@@ -57,7 +58,6 @@ describe('content style boundaries', () => {
   })
 
   it('shares one dropdown surface and option primitive across selects and search history', () => {
-    const controlStyles = readStyles('./assistant/AssistantControls.css')
     expect(controlStyles.match(/\.tcba-field-dropdown\s*\{/g)).toHaveLength(1)
     expect(controlStyles.match(/\.tcba-field-option\s*\{/g)).toHaveLength(1)
     expect(controlStyles).not.toMatch(/\.tcba-search-field__history\s*\{[^}]*background:/s)
@@ -66,6 +66,27 @@ describe('content style boundaries', () => {
     expect(controlStyles).toMatch(/\.tcba-search-field__modes--task::before\s*\{[^}]*translateX\(26px\)/s)
     expect(controlStyles).toMatch(/\.tcba-search-field__modes button\s*\{[^}]*height: 17px;/s)
     expect(controlStyles).toMatch(/\.tcba-search-field__history-actions\s*\{[^}]*height: 34px;/s)
+  })
+
+  it('sizes additional-action slots from the number of rendered controls', () => {
+    expect(controlStyles).toContain(
+      'width: calc(var(--tcba-toolbar-extra-count) * 36px + 4px)',
+    )
+    expect(controlStyles).toContain(
+      'width: calc(var(--tcba-toolbar-extra-count) * 36px - 4px)',
+    )
+    expect(resultStyles).toContain(
+      'grid-template-columns: repeat(var(--tcba-results-action-count), minmax(0, 1fr))',
+    )
+  })
+
+  it('keeps search cancellation and mascot-state spacing aligned with the layout', () => {
+    expect(panelStyles).toMatch(/\.tcba-assistant__search\s*\{[^}]*position: relative;/s)
+    expect(panelStyles).toMatch(/\.tcba-stop-button\s*\{[^}]*left: calc\(50% \+ 102px\);[^}]*width: 32px;[^}]*height: 40px;/s)
+    expect(resultStyles).toMatch(/\.tcba-results-state\s*\{[^}]*display: flex;[^}]*min-height: 0;[^}]*flex-direction: column;[^}]*overflow: hidden;/s)
+    expect(resultStyles).toMatch(/\.tcba-results-state__visual\s*\{[^}]*max-height: 292px;[^}]*min-height: 0;[^}]*flex: 1 1 auto;/s)
+    expect(resultStyles).toMatch(/\.tcba-results-state__mascot\s*\{[^}]*height: 100%;[^}]*min-height: 0;[^}]*max-height: 100%;/s)
+    expect(resultStyles).toMatch(/\.tcba-results-state__loader\s*\{[^}]*height: 32px;[^}]*flex: 0 0 32px;[^}]*margin-top: 10px;/s)
   })
 
   it('keeps the result surface under the main panel with the SVG dimensions', () => {

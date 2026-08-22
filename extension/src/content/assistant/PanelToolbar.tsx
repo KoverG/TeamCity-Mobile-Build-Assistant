@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { AdditionalActionSlot } from '../additional-actions/AdditionalActionSlot'
+import { useAdditionalActionsAt } from '../additional-actions/useAdditionalActionsAt'
 import {
   CloseIcon,
   MenuIcon,
   ProductLogoIcon,
   RefreshIcon,
   SettingsIcon,
-  TelegramIcon,
   ThemeAlternateIcon,
   ThemeIcon,
 } from './Icons'
@@ -27,6 +28,8 @@ export function PanelToolbar({
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [themeOpen, setThemeOpen] = useState(false)
   const themeRef = useRef<HTMLDivElement>(null)
+  const { actions: toolbarActions } = useAdditionalActionsAt('assistant-toolbar')
+  const extraActionCount = toolbarActions.length + 2
 
   useEffect(() => {
     if (!themeOpen) {
@@ -62,15 +65,15 @@ export function PanelToolbar({
         <div
           className={`tcba-toolbar__extras${settingsOpen ? ' tcba-toolbar__extras--open' : ''}`}
           aria-hidden={!settingsOpen}
+          style={{ '--tcba-toolbar-extra-count': extraActionCount } as CSSProperties}
         >
           <div className="tcba-toolbar__extras-track">
-            <IconButton
-              label="Telegram — скоро"
-              tone="primary"
-              decorative
-            >
-              <TelegramIcon />
-            </IconButton>
+            <AdditionalActionSlot
+              placement="assistant-toolbar"
+              context={{ type: 'none' }}
+              appearance="icon"
+              tabIndex={settingsOpen ? undefined : -1}
+            />
             <div
               className={`tcba-theme-menu${themeOpen ? ' tcba-theme-menu--open' : ''}`}
               ref={themeRef}

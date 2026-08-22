@@ -48,6 +48,7 @@ describe('PanelToolbar', () => {
     expect(container.querySelector('.tcba-toolbar__logo svg')).toBeInTheDocument()
     expect(extras).toHaveAttribute('aria-hidden', 'true')
     expect(extras).not.toHaveClass('tcba-toolbar__extras--open')
+    expect(extras).toHaveStyle('--tcba-toolbar-extra-count: 2')
 
     fireEvent.click(screen.getByRole('button', { name: 'Открыть настройки' }))
 

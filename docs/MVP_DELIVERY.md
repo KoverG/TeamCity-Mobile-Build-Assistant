@@ -2,7 +2,7 @@
 
 - Статус: руководящий delivery plan
 - Дата фиксации: 2026-08-08
-- Последнее обновление: 2026-08-11
+- Последнее обновление: 2026-08-22 (версия 1.2.0)
 
 Связанные документы:
 
@@ -12,292 +12,178 @@
 
 ## 1. Принцип реализации
 
-Разработка идёт вертикальными проверяемыми этапами. Сначала снимаются оставшиеся технические неопределённости TeamCity browser-session, затем создаётся основной продукт.
+Разработка идёт вертикальными проверяемыми этапами. Каждый этап должен сохранять рабочий базовый TeamCity-сценарий и завершаться автоматическими и ручными проверками затронутой области.
 
-Нельзя начинать с полной UI-реализации, пока диагностический spike не подтвердил реальный транспорт и REST response shapes.
+Repository считается публичным с первого дня. Source, tests, fixtures, docs, logs и staged diff проверяются на secrets, private URLs и tenant-specific данные. Отладка реального TeamCity выполняется только с локальными ignored-данными; в Git попадают исключительно синтетические контракты.
 
-Repository считается публичным с первого дня. Ни один этап не может считаться завершённым, пока source, tests, fixtures, docs, logs и staged diff не проверены на secrets, private URLs и tenant-specific данные. Отладка на реальной TeamCity выполняется только с локальными ignored-данными; в Git попадают исключительно синтетические контракты.
-
-## 2. Планируемая структура repository
+## 2. Структура repository
 
 ```text
 TeamCityHelper/
-├── TeamCityHelper.sln
-├── docs/
-├── extension/
-│   ├── src/
-│   ├── tests/
-│   ├── manifest/
-│   └── package.json
 ├── backend/
+│   ├── src/TeamCityHelper.Api/
+│   └── tests/TeamCityHelper.Api.Tests/
+├── extension/
+│   ├── public/
 │   ├── src/
-│   ├── tests/
-├── deploy/
-│   └── docker-compose.yml
-└── README.md
+│   │   ├── additional-actions/
+│   │   ├── background/
+│   │   ├── content/
+│   │   ├── diagnostics/
+│   │   ├── storage/
+│   │   └── teamcity/
+│   └── package.json
+├── docs/
+├── scripts/
+└── TeamCityHelper.sln
 ```
 
-Физическая структура может уточняться, но границы Extension/Backend/Deploy сохраняются.
+Backend foundation не является runtime-зависимостью расширения. Прикладной server API дополнительных действий разрабатывается отдельной итерацией.
 
-## 3. Этап 0 — foundation
+## 3. Foundation
 
-Результат:
+Реализованы:
 
-- базовая структура repository;
-- Extension build на TypeScript/React/Vite/Manifest V3;
-- Shadow DOM launcher внутри TeamCity;
-- ASP.NET Core solution и test projects;
-- общие conventions, lint/format/test commands;
-- `.gitignore` без secrets, build artifacts, `.idea`, `bin`, `obj`, local SQLite;
-- локальная конфигурация без production secrets;
-- `.env.example` только с нерабочими placeholders;
-- pre-commit/CI secret scanning и tenant-data scanning;
-- synthetic fixture factory без данных реальной организации;
-- документированная процедура безопасного diagnostic capture и sanitization;
-- выбранная open-source-лицензия и файл `LICENSE` до первой публичной публикации;
-- `SECURITY.md` с безопасным приватным каналом для сообщений об уязвимостях до приёма внешних пользователей.
-
-Проверка:
-
-- Extension собирается;
-- backend собирается и запускает health endpoint;
-- tests запускаются одной документированной командой;
-- unpacked Extension устанавливается в Chrome и Edge;
-- scan текущего дерева и всей существующей Git history не находит secrets, private origins и tenant identifiers.
-
-## 4. Этап 1 — TeamCity diagnostic spike
-
-Цель: закрыть последние неизвестные до основной реализации.
-
-Spike Extension:
-
-- работает только на открытой TeamCity-вкладке;
-- определяет origin;
-- выполняет read-only REST GET с существующей browser-session;
-- не использует `chrome.cookies`;
-- не сохраняет raw responses; при ручном исследовании разрешено только временное локальное хранение вне repository;
-- создаёт для tests отдельные минимальные synthetic fixtures вместо копирования реальных responses;
-- проверяется в Chrome и Edge, затем в Яндекс Браузере.
-
-Обязательные сценарии:
-
-1. Текущий пользователь авторизован.
-2. Сессия отсутствует/истекла.
-3. Полный список build configurations.
-4. `SUCCESS + finished` builds с `branch:default:any`.
-5. Ручной поиск build number.
-6. Artifact root для прямого APK.
-7. Nested artifact children для `.nupkg`.
-8. IPA внутри `.nupkg`.
-
-Решение этапа:
-
-- выбрать `TeamCityTransport` (service worker или page/content context);
-- зафиксировать REST DTO adapter;
-- документировать session detection.
-
-Spike не превращается в отдельный продукт: подтверждённые части переносятся в production modules либо удаляются.
-
-Текущий прогресс этапа на 2026-08-11:
-
-- [x] runtime origin и optional host permission;
-- [x] service-worker transport с same-tab main-world fallback;
-- [x] session detection и каталог build configurations;
-- [x] build locator `SUCCESS + finished + branch:default:any`;
-- [x] bulk-first artifact listing и ограниченный fallback для прямых и вложенных APK/IPA;
-- [x] synthetic unit/UI tests и production build;
-- [x] read-only подтверждение авторизованной сессии и catalog shape;
-- [ ] unpacked browser matrix и подтверждение JSON transport;
-- [ ] реальные build/artifact shapes без сохранения tenant data;
-- [ ] expired-session сценарий.
-
-## 5. Этап 2 — каталог и выбор build
-
-Реализуется vertical slice:
-
-```text
-Open panel
-→ SessionProbe
-→ Load build configurations
-→ Classify Project/OS/Environment
-→ Select configuration
-→ Load successful finished builds from all branches
-→ Select build / search by number
-```
-
-UI-состояния:
-
-- initial;
-- loading;
-- not authenticated;
-- forbidden;
-- empty catalog;
-- no builds;
-- loaded;
-- TeamCity unavailable;
-- unexpected response.
+- solution и проекты .NET;
+- Manifest V3 extension;
+- TypeScript, React, Vite, lint и tests;
+- production и diagnostic build modes;
+- health endpoints backend foundation;
+- `.gitignore`, public safety scan и правила безопасной диагностики.
 
 Acceptance criteria:
 
-- доступны все mobile project hierarchies, разрешённые текущему пользователю;
-- configurations обнаруживаются динамически, без фиксированного количества и hardcoded IDs;
-- выбор каскадный;
-- branch виден у каждого build;
-- default branch не исключает feature branches;
-- пользователь сам выбирает build;
-- номер build можно ввести вручную;
-- checkbox корректно хранит/удаляет selection;
-- нераспознанная configuration видна как `Unclassified`, а не исчезает;
-- новая TeamCity-инсталляция не требует изменения source code.
+- extension и backend собираются в чистом окружении;
+- production build не включает diagnostic runtime;
+- tracked-файлы не содержат secrets или реальных TeamCity данных;
+- версии extension синхронизированы в package и manifest.
 
-## 6. Этап 3 — ArtifactResolver
+## 4. TeamCity transport и каталог
 
-Реализуется bulk-first поиск выбранного build. Основной путь — один `GET /app/rest/builds/{buildLocator}/artifacts` с минимальными fields; bounded metadata/children traversal используется только для TeamCity-версий и archive shapes, которые bulk listing не раскрывает.
+Реализованы:
+
+- runtime origin discovery;
+- optional host permission для текущего HTTPS origin;
+- service-worker transport и ограниченный MAIN-world fallback;
+- нормализация REST paths;
+- bounded timeout и maximum response size;
+- загрузка projects и build configurations;
+- классификация OS и Environment;
+- tolerant parsing синтетических response contracts.
 
 Acceptance criteria:
 
-- найден APK в synthetic fixture с прямым размещением;
-- найден APK в synthetic fixture с вложенным размещением;
-- найден IPA в synthetic fixture с вложенным размещением;
+- browser-session используется без чтения cookie;
+- cross-origin и неподдерживаемые paths отклоняются;
+- catalog/search errors имеют стабильные безопасные сообщения;
+- TeamCity credentials и raw responses не попадают в storage и production logs.
+
+## 5. Поиск builds и artifacts
+
+Реализованы:
+
+- фильтры Project/Platform/Environment;
+- поиск по части task branch и точному публичному build number;
+- ограничение количества builds и concurrency;
+- bulk-first artifact listing;
+- bounded recursive fallback для архивов;
+- поиск APK/IPA без учёта регистра;
+- использование server-provided `contentHref`;
+- состояния `Resolved`, `NotFound` и `Ambiguous`;
+- отмена и timeout через `AbortController`.
+
+Acceptance criteria:
+
+- 0 candidates не создаёт карточку результата;
+- ровно 1 candidate создаёт карточку;
+- 2+ candidates не приводят к автоматическому выбору;
 - `.nupkg` не выдаётся как конечный artifact;
-- 0 candidates блокирует действия;
-- 2+ candidates блокируют действия;
-- URL сохраняет `!/` и корректное encoding;
-- Android `.apk` и iOS `.ipa` фильтруются без учёта регистра;
-- используется server-provided `contentHref`, а при его отсутствии — проверенный runtime fallback `repository/download`;
-- synthetic large listing обрабатывается одним bulk request;
-- нераскрытый archive включает ограниченный concurrent fallback;
-- общий timeout отменяет поиск через `AbortController` и даёт понятную ошибку;
-- `.nupkg` не скачивается целиком только ради поиска вложенного файла;
-- resolver не уходит в бесконечный обход;
-- превышение limits даёт понятную ошибку;
-- поиск запускается только после выбора build.
+- resolver не уходит в бесконечный обход и не скачивает архив целиком;
+- large synthetic listing обрабатывается в пределах установленных limits.
 
-## 7. Этап 4 — Backend foundation и Telegram pairing
+## 6. Базовый UI
 
-Реализуются:
+Реализованы:
 
-- SQLite schema/migrations;
-- Telegram webhook;
-- pairing request;
-- Telegram `/start <code>`;
-- polling статуса pairing;
-- выдача device token;
-- hash token storage;
-- несколько active devices;
-- revoke-ready data model;
-- автоматический `Active` entitlement.
+- launcher и встроенная Shadow DOM панель;
+- фильтры и два режима поиска;
+- история запросов по TeamCity origin;
+- drawer результатов с loading/empty/error states;
+- остановка активного поиска с переходом в empty state;
+- сброс рабочей UI-сессии при закрытии панели с сохранением истории запросов;
+- сортировка и множественный выбор builds;
+- копирование одной или нескольких ссылок;
+- открытие build и artifact через проверенный service-worker contract;
+- keyboard/focus semantics и reduced motion;
+- diagnostic console только для diagnostic build.
 
-Acceptance criteria:
+Базовый UI не вызывает собственный backend. Ошибки или отсутствие backend foundation не влияют на TeamCity-сценарии.
 
-- code одноразовый и истекает;
-- повторное использование code запрещено;
-- raw code/token отсутствуют в logs/DB;
-- пользователь получает личное подтверждение pairing;
-- повторный pairing добавляет device и не деактивирует остальные;
-- чужой device не может получить результат pairing.
+## 7. Универсальные дополнительные действия
 
-## 8. Этап 5 — отправка build link
+Версия 1.2.0 добавляет frontend-архитектуру без server API:
 
-Реализуется команда `SendBuildLink`:
-
-```text
-Authenticate device
-→ Check entitlement
-→ Validate structured TeamCity link
-→ Rate limit
-→ Idempotency
-→ Format message
-→ Telegram sendMessage
-```
+- единый `AdditionalActionsService`;
+- injected `AdditionalActionsGateway`;
+- пустой `NullAdditionalActionsGateway` в production composition root;
+- один React provider для всех placement-слотов;
+- placements `assistant-toolbar` и `build-results`;
+- локальный allowlist универсальных иконок;
+- ограниченные descriptors и context-типы;
+- единый execution path с request ID;
+- динамический toolbar/footer без пустых областей.
 
 Acceptance criteria:
 
-- сообщение приходит в личный chat paired пользователя;
-- содержит Project, OS, Environment, build number/date, branch и URL;
-- backend не принимает произвольный `chat_id`;
-- URL другого origin отклоняется;
-- не-APK/IPA URL отклоняется;
-- повторный `Idempotency-Key` не создаёт второе сообщение;
-- два разных devices одного account могут отправлять по одному запросу;
-- expired/revoked device отклоняется;
-- отсутствие entitlement отклоняется backend независимо от UI.
+- базовая сборка не выполняет сетевых запросов дополнительных действий;
+- пустой gateway не создаёт кнопки, gaps или disabled-состояния;
+- synthetic gateway может добавить действия в оба placement;
+- descriptors с неизвестным placement, icon, context, duplicate ID или превышением limits отклоняются целиком;
+- action выполняется только через общий service;
+- неизвестный action ID и несовместимый context не передаются gateway;
+- выбор build преобразуется в минимальную внутреннюю ссылочную модель без cookie и tokens;
+- добавление нового UI placement не создаёт отдельный API-клиент.
 
-## 9. Этап 6 — интеграция UX
+## 8. Будущий сетевой gateway
 
-Реализуются:
+Не входит в версию 1.2.0:
 
-- onboarding;
-- Telegram connection state;
-- кнопки copy/open/send;
-- success/error notifications;
-- retry безопасных GET;
-- защита от двойного клика send;
-- корректное состояние при исчезнувшем artifact;
-- минимальная доступность keyboard/focus/labels.
+- адрес и transport собственного backend;
+- внешний JSON/API contract;
+- authentication и entitlement;
+- цифровая подпись, cache и срок действия ответа;
+- idempotency на стороне backend;
+- прикладная интеграционная логика;
+- privacy disclosure и пользовательское подтверждение передачи данных.
 
-UI не показывает raw exception или TeamCity XML/HTML.
+Эти решения принимаются вместе с разработкой backend. Новый adapter подключается к существующему `AdditionalActionsService`, не меняя TeamCity-модули и UI-слоты.
 
-## 10. Этап 7 — deployment
-
-Backend разворачивается на VPS как отдельный isolated service.
-
-Checklist:
-
-- отдельный hostname;
-- HTTPS certificate;
-- отдельный Docker Compose project/network/volume;
-- secrets вне repository/image;
-- SQLite backup;
-- Telegram webhook secret;
-- resource limits;
-- health checks;
-- restart policy;
-- log rotation;
-- запрет публичного доступа к SQLite/служебным портам;
-- smoke test pairing и отправки.
-
-Extension для MVP распространяется как unpacked build с короткой инструкцией установки. Публикация в store или enterprise deployment принимается отдельным решением после MVP.
-
-## 11. Стратегия тестирования
+## 9. Стратегия тестирования
 
 ### Extension unit tests
 
-- classifier;
-- build filters;
-- selection persistence;
-- session response classification;
-- artifact traversal;
-- URL handling;
-- backend DTO validation.
+- classifier и build filters;
+- удаление legacy selection и search history storage;
+- TeamCity transport и response classification;
+- artifact traversal, limits и URL handling;
+- validation и выполнение дополнительных действий;
+- пустой и synthetic gateway.
 
 ### Extension integration tests
 
-- captured TeamCity fixtures;
 - Shadow DOM mounting;
-- cascading selectors;
-- expired session state;
-- direct/nested artifacts;
-- DOM integration adapter.
+- основная панель и drawer результатов;
+- filters/search/results lifecycle;
+- copy/open/download actions;
+- toolbar и result placements;
+- отсутствие пустой геометрии при нуле дополнительных действий;
+- сохранение базового поведения при ошибке gateway.
 
-### Backend unit tests
+### Backend foundation tests
 
-- pairing expiry/one-time semantics;
-- token hashing/authentication;
-- entitlement policy;
-- link validator;
-- idempotency;
-- message formatter;
-- rate-limit keys.
-
-### Backend integration tests
-
-- EF Core SQLite migrations;
-- webhook handling;
-- pairing end-to-end без реальной оплаты;
-- Telegram client через fake HTTP handler;
-- concurrent idempotent requests;
-- restart с сохранённым SQLite state.
+- assembly и configuration foundation;
+- liveness/readiness endpoints после появления соответствующего integration harness;
+- отсутствие зависимости extension tests от запущенного backend.
 
 ### Manual browser matrix
 
@@ -307,59 +193,52 @@ Extension для MVP распространяется как unpacked build с �
 | TeamCity session GET | обязательно | обязательно | обязательно |
 | Shadow DOM UI | обязательно | обязательно | обязательно |
 | Local storage | обязательно | обязательно | обязательно |
-| Telegram pairing | обязательно | обязательно | обязательно |
-| Copy/open direct link | обязательно | обязательно | обязательно |
+| Copy/open/download direct link | обязательно | обязательно | обязательно |
+| Пустые additional-action slots | обязательно | обязательно | обязательно |
 
-## 12. Риски и меры
+## 10. Риски и меры
 
 | Риск | Мера |
 |---|---|
-| TeamCity cookies не отправляются из выбранного Extension context | Этап 1 выбирает transport по фактическому поведению |
-| TeamCity REST response меняется | Adapter + synthetic contract fixtures + tolerant parsing |
-| Naming convention меняется | Отдельный configurable classifier profile |
-| DOM TeamCity меняется | Shadow DOM + изолированный page adapter + feature flag |
-| Artifact tree большой | Bulk listing как основной путь; bounded concurrent fallback, limits, timeout, deduplication href |
-| Несколько APK/IPA | Блокирующая `AmbiguousArtifact`, без авто-выбора |
-| Artifact удалён retention policy | Понятная expired/not found ошибка, без обещания вечной ссылки |
-| Telegram endpoint используется для спама | Pairing/device auth, rate limit, entitlement, device-bound origin, idempotency |
-| Device token украден | HTTPS, hash at rest, revoke, отсутствие token в logs |
-| VPS-проекты влияют друг на друга | Изолированные container/network/volume/secrets/resources |
-| Яндекс отключает unpacked extension | MVP-тест; затем store/enterprise решение |
-| Данные реального TeamCity попадают в публичный Git | Ignored raw captures, synthetic fixtures, pre-commit/CI scanning, staged/history review |
-| Код зависит от домена или naming одной компании | Runtime origin discovery, optional permissions, configurable classifier и `Unclassified` fallback |
+| TeamCity cookies недоступны service worker | Ограниченный MAIN-world fallback без чтения cookie |
+| TeamCity REST response меняется | Tolerant adapter и synthetic contract fixtures |
+| Naming convention меняется | Configurable classifier и `Unclassified` fallback |
+| DOM TeamCity меняется | Shadow DOM и изолированные integration boundaries |
+| Artifact tree большой | Bulk listing, bounded fallback, limits, timeout и deduplication |
+| Несколько APK/IPA | Блокирующий `Ambiguous`, без авто-выбора |
+| Artifact удалён cleanup policy | Понятная not-found ошибка без обещания вечной ссылки |
+| Gateway недоступен | Пустой список действий; базовый UI продолжает работать |
+| Descriptor повреждён | Fail-closed validation всего набора |
+| UI разрастается от новых действий | Ограничение placements и числа действий в каждом слоте |
+| Реальные данные попадают в Git | Ignored captures, synthetic fixtures и public safety scan |
 
-## 13. Definition of Done MVP
+## 11. Definition of Done версии 1.2.0
 
-MVP готов, когда:
+Версия готова, когда:
 
-1. Пользователь устанавливает Extension по документированной инструкции.
-2. В авторизованном TeamCity видит плавающую кнопку и панель.
-3. Выбирает Project, OS, Environment и успешный завершённый build из любого branch.
-4. Может найти build по номеру.
-5. Получает однозначный APK/IPA при прямом или вложенном размещении.
-6. Видит понятные ошибки при отсутствующем/неоднозначном artifact.
-7. Один раз связывает Telegram account.
-8. Отправляет ссылку в личный Telegram chat.
-9. Повтор запроса не создаёт дубль.
-10. Все backend send paths проверяют entitlement.
+1. Пользователь устанавливает Extension и открывает панель в авторизованном TeamCity.
+2. Выбирает Project, Platform и Environment и выполняет поиск.
+3. Получает однозначный APK/IPA при прямом или вложенном размещении.
+4. Видит понятные ошибки при отсутствующем или неоднозначном artifact.
+5. Копирует ссылки, открывает build и начинает скачивание artifact.
+6. Все базовые сценарии работают без собственного backend.
+7. В базовом UI отсутствуют неработающие внешние действия и пустые места от них.
+8. `AdditionalActionsService` централизует все frontend placements.
+9. Production gateway не выполняет сетевых запросов и возвращает пустой список.
+10. Synthetic gateway подтверждает подключаемость toolbar и result actions.
 11. TeamCity credentials/cookies не покидают браузер.
-12. Telegram Bot Token отсутствует в Extension/repository/logs.
-13. Chrome, Edge и Яндекс проходят согласованную manual matrix.
-14. Backend изолированно работает на VPS, имеет health checks и backup.
-15. Build, tests и lint проходят документированными командами.
-16. Source, tests, fixtures, docs, config и вся Git history прошли secret/tenant-data scan.
-17. В repository нет реальных TeamCity URLs, company/project/build IDs, branches, artifact paths, персональных данных и operational secrets.
-18. Подключение другой TeamCity-инсталляции не требует изменения или пересборки source code.
+12. Chrome, Edge и Яндекс проходят согласованную manual matrix.
+13. Typecheck, lint, tests, diagnostic/production builds и .NET tests проходят.
+14. Source, tests, fixtures, docs, config и distributive проходят public safety scan.
+15. Подключение другой TeamCity-инсталляции не требует изменения source code.
 
-## 14. После MVP
+## 12. После версии 1.2.0
 
 Следующий backlog:
 
-1. Кнопки возле builds в TeamCity UI.
-2. Поиск по task branch и группировка builds одной задачи.
-3. Множественный выбор builds/environments.
-4. Управление devices.
-5. Платные subscriptions.
-6. UI управления несколькими TeamCity origins для одного device/account.
-7. Отдельный Web UI.
-8. Store или enterprise distribution Extension.
+1. Согласовать и реализовать один сетевой gateway дополнительных действий.
+2. Добавлять новые placement-слоты без дублирования server transport.
+3. Определить versioned server contract, authentication, cache и idempotency.
+4. Добавить пользовательское подтверждение для действий, передающих данные.
+5. Расширить classification profiles и поддержку TeamCity origins.
+6. Рассмотреть Store или enterprise distribution.

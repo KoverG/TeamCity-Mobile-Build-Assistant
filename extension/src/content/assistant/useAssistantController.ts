@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
 import type { MobilePlatform } from '../../teamcity/ArtifactResolver'
 import {
   normalizeBuildSearchQuery,
@@ -18,10 +18,6 @@ import {
 } from '../../teamcity/BuildConfigurationClassifier'
 import type { TeamCityService } from '../../teamcity/TeamCityService'
 import { TeamCityError } from '../../teamcity/TeamCityError'
-import type {
-  RememberedSelection,
-  SelectionStorage,
-} from '../../storage/SelectionStorage'
 import {
   withRememberedQuery,
   type SearchHistory,
@@ -64,13 +60,14 @@ type AssistantAction =
   | { type: 'select-environment'; environment: MobileEnvironment | '' }
   | { type: 'select-search-mode'; mode: BuildSearchMode }
   | { type: 'set-search-query'; mode: BuildSearchMode; query: string }
-  | { type: 'discard-draft' }
   | { type: 'search-loading'; appliedSearch: AssistantSearchParameters }
   | { type: 'search-ready'; matches: BuildArtifactMatch[] }
+  | { type: 'search-stopped' }
   | { type: 'search-error'; message: string }
   | { type: 'remember-query'; history: SearchHistory }
   | { type: 'clear-history'; mode: BuildSearchMode }
   | { type: 'toggle-build'; buildId: string }
+  | { type: 'reset-session' }
 
 interface AssistantSelection {
   projectId: string
@@ -86,7 +83,6 @@ interface AssistantSearchParameters extends AssistantSelection {
 interface AssistantControllerOptions {
   service: TeamCityService
   classifier: BuildConfigurationClassifier
-  storage: SelectionStorage
   historyStorage: SearchHistoryStorage
   origin: string
 }
@@ -108,8 +104,9 @@ export interface AssistantController {
   selectSearchMode(mode: BuildSearchMode): void
   setSearchQuery(mode: BuildSearchMode, query: string): void
   clearSearchHistory(mode: BuildSearchMode): void
-  discardDraftChanges(): void
+  resetSession(): void
   search(): Promise<boolean>
+  stopSearch(): void
   toggleBuild(buildId: string): void
 }
 
@@ -123,21 +120,27 @@ function emptySearchParameters(): AssistantSearchParameters {
   }
 }
 
-const initialState: AssistantState = {
-  catalogStatus: 'idle',
-  searchStatus: 'idle',
-  configurations: [],
-  selectedProjectId: '',
-  selectedPlatforms: [],
-  selectedEnvironment: '',
-  searchMode: 'task',
-  searchQueries: { task: '', build: '' },
-  appliedSearch: emptySearchParameters(),
-  searchHistory: { task: [], build: [] },
-  matches: [],
-  selectedBuildIds: new Set(),
-  hasSearched: false,
+function createInitialState(
+  searchHistory: SearchHistory = { task: [], build: [] },
+): AssistantState {
+  return {
+    catalogStatus: 'idle',
+    searchStatus: 'idle',
+    configurations: [],
+    selectedProjectId: '',
+    selectedPlatforms: [],
+    selectedEnvironment: '',
+    searchMode: 'task',
+    searchQueries: { task: '', build: '' },
+    appliedSearch: emptySearchParameters(),
+    searchHistory,
+    matches: [],
+    selectedBuildIds: new Set(),
+    hasSearched: false,
+  }
 }
+
+const initialState = createInitialState()
 
 function reducer(state: AssistantState, action: AssistantAction): AssistantState {
   switch (action.type) {
@@ -195,15 +198,6 @@ function reducer(state: AssistantState, action: AssistantAction): AssistantState
           [action.mode]: normalizeBuildSearchQuery(action.query),
         },
       }
-    case 'discard-draft':
-      return {
-        ...state,
-        selectedProjectId: state.appliedSearch.projectId,
-        selectedPlatforms: state.appliedSearch.platforms,
-        selectedEnvironment: state.appliedSearch.environment,
-        searchMode: state.appliedSearch.searchMode,
-        searchQueries: state.appliedSearch.queries,
-      }
     case 'search-loading':
       return {
         ...state,
@@ -219,6 +213,15 @@ function reducer(state: AssistantState, action: AssistantAction): AssistantState
         ...state,
         searchStatus: 'ready',
         matches: action.matches,
+        selectedBuildIds: new Set(),
+        searchErrorMessage: undefined,
+        hasSearched: true,
+      }
+    case 'search-stopped':
+      return {
+        ...state,
+        searchStatus: 'ready',
+        matches: [],
         selectedBuildIds: new Set(),
         searchErrorMessage: undefined,
         hasSearched: true,
@@ -248,6 +251,8 @@ function reducer(state: AssistantState, action: AssistantAction): AssistantState
       }
       return { ...state, selectedBuildIds }
     }
+    case 'reset-session':
+      return createInitialState(state.searchHistory)
   }
 }
 
@@ -290,16 +295,6 @@ function projectsFrom(configurations: readonly ClassifiedBuildConfiguration[]): 
   return [...projects.values()].sort((left, right) => left.name.localeCompare(right.name))
 }
 
-function rememberedPlatforms(remembered: RememberedSelection | undefined): MobilePlatform[] {
-  if (remembered?.os === 'Android') {
-    return ['android']
-  }
-  if (remembered?.os === 'iOS') {
-    return ['ios']
-  }
-  return []
-}
-
 function environmentOptions(
   configurations: readonly ClassifiedBuildConfiguration[],
   projectId: string,
@@ -321,24 +316,18 @@ function environmentOptions(
 function resolvedSelection(
   configurations: readonly ClassifiedBuildConfiguration[],
   current: AssistantSelection,
-  remembered: RememberedSelection | undefined,
 ): AssistantSelection {
   const projects = projectsFrom(configurations)
   const projectId = projects.some((project) => project.id === current.projectId)
     ? current.projectId
-    : projects.some((project) => project.id === remembered?.projectId)
-      ? remembered?.projectId ?? ''
-      : ''
+    : ''
   const platforms = current.projectId === projectId
     ? current.platforms
-    : rememberedPlatforms(remembered)
+    : []
   const environments = environmentOptions(configurations, projectId, platforms)
-  const rememberedEnvironment = remembered?.environment === 'Unclassified'
-    ? ''
-    : remembered?.environment
   const preferredEnvironment = current.projectId === projectId
     ? current.environment
-    : rememberedEnvironment ?? ''
+    : ''
 
   return {
     projectId,
@@ -359,27 +348,11 @@ function parametersFromState(state: AssistantState): AssistantSearchParameters {
   }
 }
 
-function rememberedParameters(remembered: RememberedSelection | undefined): AssistantSearchParameters {
-  return {
-    projectId: remembered?.projectId ?? '',
-    platforms: rememberedPlatforms(remembered),
-    environment: remembered?.environment === 'Unclassified'
-      ? ''
-      : remembered?.environment ?? '',
-    searchMode: remembered?.searchMode ?? 'task',
-    queries: {
-      task: normalizeBuildSearchQuery(remembered?.taskQuery ?? ''),
-      build: normalizeBuildSearchQuery(remembered?.buildQuery ?? ''),
-    },
-  }
-}
-
 function resolvedParameters(
   configurations: readonly ClassifiedBuildConfiguration[],
   preferred: AssistantSearchParameters,
-  fallback?: RememberedSelection,
 ): AssistantSearchParameters {
-  const filters = resolvedSelection(configurations, preferred, fallback)
+  const filters = resolvedSelection(configurations, preferred)
   return {
     ...filters,
     searchMode: preferred.searchMode,
@@ -387,24 +360,9 @@ function resolvedParameters(
   }
 }
 
-function storedSelection(parameters: AssistantSearchParameters): RememberedSelection {
-  const os = parameters.platforms.length === 1
-    ? parameters.platforms[0] === 'android' ? 'Android' : 'iOS'
-    : 'Unclassified'
-  return {
-    projectId: parameters.projectId,
-    os,
-    environment: parameters.environment || 'Unclassified',
-    searchMode: parameters.searchMode,
-    taskQuery: parameters.queries.task,
-    buildQuery: parameters.queries.build,
-  }
-}
-
 export function useAssistantController({
   service,
   classifier,
-  storage,
   historyStorage,
   origin,
 }: AssistantControllerOptions): AssistantController {
@@ -412,6 +370,7 @@ export function useAssistantController({
   const catalogRequestRef = useRef(0)
   const searchRequestRef = useRef(0)
   const searchAbortRef = useRef<AbortController | undefined>(undefined)
+  const restoreStoredHistoryRef = useRef(true)
 
   const projects = useMemo(
     () => projectsFrom(state.configurations),
@@ -443,33 +402,41 @@ export function useAssistantController({
     state.selectedProjectId,
   ])
 
-  useEffect(() => () => searchAbortRef.current?.abort(), [])
+  useEffect(() => () => {
+    catalogRequestRef.current += 1
+    searchRequestRef.current += 1
+    searchAbortRef.current?.abort()
+    searchAbortRef.current = undefined
+  }, [])
 
   async function loadCatalog() {
     const requestId = ++catalogRequestRef.current
     searchRequestRef.current += 1
-    searchAbortRef.current?.abort()
+    const activeSearch = searchAbortRef.current
+    searchAbortRef.current = undefined
+    activeSearch?.abort()
     const current = state
+    if (current.searchStatus === 'loading') {
+      dispatch({ type: 'search-stopped' })
+    }
     dispatch({ type: 'catalog-loading' })
     try {
-      const [result, remembered, history] = await Promise.all([
+      const [result, history] = await Promise.all([
         service.loadCatalog(),
-        storage.load(origin).catch(() => undefined),
-        historyStorage.load(origin).catch(() => ({ task: [], build: [] })),
+        restoreStoredHistoryRef.current
+          ? historyStorage.load(origin).catch(() => ({ task: [], build: [] }))
+          : Promise.resolve(current.searchHistory),
       ])
       if (requestId !== catalogRequestRef.current) {
         return
       }
       const configurations = classifyBuildConfigurations(result.configurations, classifier)
-      const fallback = rememberedParameters(remembered)
-      const firstLoad = current.configurations.length === 0
-      const appliedPreferred = firstLoad ? fallback : current.appliedSearch
-      const draftPreferred = firstLoad ? fallback : parametersFromState(current)
+      restoreStoredHistoryRef.current = false
       dispatch({
         type: 'catalog-ready',
         configurations,
-        draft: resolvedParameters(configurations, draftPreferred, remembered),
-        appliedSearch: resolvedParameters(configurations, appliedPreferred, remembered),
+        draft: resolvedParameters(configurations, parametersFromState(current)),
+        appliedSearch: resolvedParameters(configurations, current.appliedSearch),
         searchHistory: history,
       })
     } catch (error) {
@@ -497,7 +464,6 @@ export function useAssistantController({
     const controller = new AbortController()
     searchAbortRef.current = controller
     dispatch({ type: 'search-loading', appliedSearch })
-    void storage.save(origin, storedSelection(appliedSearch)).catch(() => undefined)
     const configurations: BuildArtifactSearchConfiguration[] = searchableConfigurations.map(
       (configuration) => ({
         id: configuration.id,
@@ -537,6 +503,25 @@ export function useAssistantController({
     return false
   }
 
+  const stopSearch = useCallback(() => {
+    const activeSearch = searchAbortRef.current
+    if (activeSearch === undefined) {
+      return
+    }
+    searchRequestRef.current += 1
+    searchAbortRef.current = undefined
+    activeSearch.abort()
+    dispatch({ type: 'search-stopped' })
+  }, [])
+
+  const resetSession = useCallback(() => {
+    catalogRequestRef.current += 1
+    searchRequestRef.current += 1
+    searchAbortRef.current?.abort()
+    searchAbortRef.current = undefined
+    dispatch({ type: 'reset-session' })
+  }, [])
+
   function clearSearchHistory(mode: BuildSearchMode) {
     const nextHistory = { ...state.searchHistory, [mode]: [] }
     dispatch({ type: 'clear-history', mode })
@@ -555,8 +540,9 @@ export function useAssistantController({
     selectSearchMode: (mode) => dispatch({ type: 'select-search-mode', mode }),
     setSearchQuery: (mode, query) => dispatch({ type: 'set-search-query', mode, query }),
     clearSearchHistory,
-    discardDraftChanges: () => dispatch({ type: 'discard-draft' }),
+    resetSession,
     search,
+    stopSearch,
     toggleBuild: (buildId) => dispatch({ type: 'toggle-build', buildId }),
   }
 }

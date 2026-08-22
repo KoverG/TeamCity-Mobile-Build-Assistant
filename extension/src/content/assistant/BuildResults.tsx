@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react'
 import { contentAssetUrl } from '../assetUrl'
+import { AdditionalActionSlot } from '../additional-actions/AdditionalActionSlot'
+import { useAdditionalActionsAt } from '../additional-actions/useAdditionalActionsAt'
 import type { BuildArtifactMatch } from '../../teamcity/BuildArtifactSearch'
 import helloMascotAsset from './assets/Main_Hello.png'
 import waitingMascotAsset from './assets/Main_Waiting.png'
@@ -14,7 +16,6 @@ import {
   DownloadIcon,
   ResultsGhostIcon,
   SortBuildsIcon,
-  TelegramIcon,
 } from './Icons'
 import { IconButton } from './IconButton'
 import { OverlayScrollbar } from './ScrollArea'
@@ -167,7 +168,7 @@ function MascotState({ type }: { type: 'hello' | 'waiting' | 'not-found' }) {
   if (type === 'waiting') {
     return (
       <div className="tcba-results-state tcba-results-state--waiting" role="status">
-        <div className="tcba-results-state__waiting-visual">
+        <div className="tcba-results-state__visual tcba-results-state__waiting-visual">
           <img className="tcba-results-state__mascot" src={waitingMascotUrl} alt="Маскот ищет сборки" />
           <img className="tcba-results-state__shadow" src={waitingShadowUrl} alt="" />
         </div>
@@ -180,11 +181,13 @@ function MascotState({ type }: { type: 'hello' | 'waiting' | 'not-found' }) {
   const notFound = type === 'not-found'
   return (
     <div className={`tcba-results-state tcba-results-state--${type}`}>
-      <img
-        className="tcba-results-state__mascot"
-        src={notFound ? notFoundMascotUrl : helloMascotUrl}
-        alt=""
-      />
+      <div className="tcba-results-state__visual">
+        <img
+          className="tcba-results-state__mascot"
+          src={notFound ? notFoundMascotUrl : helloMascotUrl}
+          alt=""
+        />
+      </div>
       <strong>{notFound ? 'Не удалось найти сборки' : 'Здесь пока ничего нет'}</strong>
       <span>
         {notFound
@@ -217,6 +220,17 @@ export function BuildResults({
   }), [matches, sortOrder])
   const scroll = useScrollMetrics(listRef, sortedMatches, 28)
   const selectedMatches = sortedMatches.filter((match) => selectedBuildIds.has(match.build.id))
+  const { actions: resultActions } = useAdditionalActionsAt('build-results')
+  const actionContext = useMemo(() => ({
+    type: 'build-selection' as const,
+    builds: selectedMatches.map((match) => ({
+      buildId: match.build.id,
+      buildNumber: match.build.number,
+      artifactName: match.artifact.name,
+      artifactHref: match.artifact.contentHref,
+      platform: match.configuration.platform,
+    })),
+  }), [selectedMatches])
 
   useEffect(() => {
     if (revealedBuildId === undefined) {
@@ -322,7 +336,10 @@ export function BuildResults({
             <div className={`tcba-results__fade tcba-results__fade--bottom${scroll.overflowEnd ? ' tcba-results__fade--visible' : ''}`} aria-hidden="true" />
           </div>
 
-          <footer className="tcba-results__footer">
+          <footer
+            className="tcba-results__footer"
+            style={{ '--tcba-results-action-count': resultActions.length + 1 } as CSSProperties}
+          >
             <button
               className="tcba-action-button tcba-action-button--secondary"
               type="button"
@@ -330,10 +347,12 @@ export function BuildResults({
             >
               {selectedMatches.length > 0 ? 'Копировать' : 'Копировать все'}
             </button>
-            <button className="tcba-action-button" type="button" aria-disabled="true" tabIndex={-1}>
-              <TelegramIcon />
-              Отправить в ТГ
-            </button>
+            <AdditionalActionSlot
+              placement="build-results"
+              context={actionContext}
+              appearance="button"
+              disabled={selectedMatches.length === 0}
+            />
           </footer>
         </>
       )}

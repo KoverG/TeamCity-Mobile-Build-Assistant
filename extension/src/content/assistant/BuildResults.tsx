@@ -266,7 +266,7 @@ export function BuildResults({
     }
   }, [revealedBuildId])
 
-  const showCards = status === 'ready' && matches.length > 0
+  const showCards = (status === 'ready' || status === 'loading') && matches.length > 0
   const headerText = status === 'loading'
       ? 'Поиск...'
       : status === 'error'
@@ -310,7 +310,7 @@ export function BuildResults({
           <span>{errorMessage}</span>
           <button type="button" onClick={onRetry}>Повторить</button>
         </div>
-      ) : status === 'loading' ? (
+      ) : status === 'loading' && !showCards ? (
         <MascotState type="waiting" />
       ) : !hasSearched ? (
         <MascotState type="hello" />
@@ -361,13 +361,19 @@ export function BuildResults({
             className="tcba-results__footer"
             style={{ '--tcba-results-action-count': resultActions.length + 1 } as CSSProperties}
           >
-            <button
-              className="tcba-action-button tcba-action-button--secondary"
-              type="button"
-              onClick={() => onCopy(selectedMatches.length > 0 ? selectedMatches : sortedMatches)}
-            >
-              {selectedMatches.length > 0 ? 'Копировать' : 'Копировать все'}
-            </button>
+            {status === 'loading' ? (
+              <div className="tcba-results__footer-loader" role="status" aria-label="Поиск сборок продолжается">
+                <img src={waitingLoaderUrl} alt="" />
+              </div>
+            ) : (
+              <button
+                className="tcba-action-button tcba-action-button--secondary"
+                type="button"
+                onClick={() => onCopy(selectedMatches.length > 0 ? selectedMatches : sortedMatches)}
+              >
+                {selectedMatches.length > 0 ? 'Копировать' : 'Копировать все'}
+              </button>
+            )}
             <AdditionalActionSlot
               placement="build-results"
               context={actionContext}

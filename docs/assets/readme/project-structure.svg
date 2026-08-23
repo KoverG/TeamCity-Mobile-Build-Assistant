@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="560" viewBox="0 0 1200 560" role="img" aria-labelledby="title description">
+  <title id="title">Структура проекта TeamCity Mobile Build Assistant</title>
+  <desc id="description">Репозиторий содержит расширение браузера, независимую серверную основу, документацию, проверки безопасности и непрерывную интеграцию.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#fff4f6"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="5" stdDeviation="6" flood-color="#92132f" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="560" rx="24" fill="url(#background)"/>
+  <text x="600" y="45" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="24" font-weight="700" fill="#171922">Структура репозитория</text>
+  <g font-family="Inter,Segoe UI,Arial,sans-serif">
+    <g filter="url(#shadow)">
+      <rect x="370" y="75" width="460" height="74" rx="18" fill="#f4214f"/>
+      <rect x="45" y="205" width="690" height="240" rx="22" fill="#ffffff" stroke="#f4214f" stroke-width="2"/>
+      <rect x="775" y="205" width="380" height="112" rx="20" fill="#ffffff" stroke="#ffc0ce"/>
+      <rect x="775" y="333" width="180" height="112" rx="20" fill="#ffffff" stroke="#ffc0ce"/>
+      <rect x="975" y="333" width="180" height="112" rx="20" fill="#ffffff" stroke="#ffc0ce"/>
+    </g>
+    <path d="M600 149V181H390V205M600 181H965V205M600 181H865V333M600 181H1065V333" fill="none" stroke="#d91d46" stroke-width="3"/>
+    <text x="600" y="105" text-anchor="middle" font-size="22" font-weight="700" fill="#ffffff">TeamCity Mobile Build Assistant</text>
+    <text x="600" y="130" text-anchor="middle" font-size="13" fill="#fff0f3">единый репозиторий</text>
+
+    <text x="75" y="244" font-size="21" font-weight="700" fill="#171922">Расширение браузера</text>
+    <text x="75" y="269" font-size="13" fill="#626262">extension/ • основной пользовательский продукт</text>
+    <g fill="#fff7f8" stroke="#ffd0da">
+      <rect x="75" y="295" width="190" height="112" rx="14"/>
+      <rect x="285" y="295" width="190" height="112" rx="14"/>
+      <rect x="495" y="295" width="190" height="112" rx="14"/>
+    </g>
+    <g text-anchor="middle" fill="#171922">
+      <text x="170" y="327" font-size="16" font-weight="700">Интерфейс</text>
+      <text x="170" y="352" font-size="12" fill="#626262">React • Shadow DOM</text>
+      <text x="170" y="373" font-size="12" fill="#626262">фильтры и результаты</text>
+      <text x="380" y="327" font-size="16" font-weight="700">Работа с TeamCity</text>
+      <text x="380" y="352" font-size="12" fill="#626262">каталог • сборки</text>
+      <text x="380" y="373" font-size="12" fill="#626262">мобильные пакеты</text>
+      <text x="590" y="327" font-size="16" font-weight="700">Локальные данные</text>
+      <text x="590" y="352" font-size="12" fill="#626262">история запросов</text>
+      <text x="590" y="373" font-size="12" fill="#626262">настройки лаунчера</text>
+    </g>
+
+    <text x="805" y="244" font-size="19" font-weight="700" fill="#171922">Серверная основа</text>
+    <text x="805" y="270" font-size="13" fill="#626262">backend/ • .NET</text>
+    <text x="805" y="294" font-size="12" fill="#626262">Не требуется для работы расширения</text>
+
+    <text x="865" y="372" text-anchor="middle" font-size="18" font-weight="700" fill="#171922">Документация</text>
+    <text x="865" y="399" text-anchor="middle" font-size="13" fill="#626262">docs/</text>
+    <text x="865" y="421" text-anchor="middle" font-size="12" fill="#626262">продукт и архитектура</text>
+
+    <text x="1065" y="372" text-anchor="middle" font-size="18" font-weight="700" fill="#171922">Качество</text>
+    <text x="1065" y="399" text-anchor="middle" font-size="13" fill="#626262">scripts/ • .github/</text>
+    <text x="1065" y="421" text-anchor="middle" font-size="12" fill="#626262">проверки и сборки</text>
+  </g>
+  <text x="600" y="520" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="13" fill="#626262">Основной сценарий выполняется внутри браузера и обращается непосредственно к TeamCity.</text>
+  <text x="600" y="542" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="12" fill="#7e7e7e">TeamCity Mobile Build Assistant</text>
+</svg>

@@ -29,11 +29,13 @@ export interface BuildArtifactSearchResult {
   failedConfigurations: number
   failedBuilds: number
   ambiguousBuilds: number
+  failedBuildPages: number
   transport: TeamCityTransportKind
 }
 
 export interface BuildArtifactSearchOptions {
-  maximumBuilds?: number
+  pageSize?: number
+  maximumPages?: number
   concurrency?: number
   query?: BuildSearchQuery
   timeoutMs?: number
@@ -42,7 +44,8 @@ export interface BuildArtifactSearchOptions {
   onProgress?(result: BuildArtifactSearchResult): void
 }
 
-const defaultMaximumBuilds = 20
+const defaultPageSize = 50
+const defaultMaximumPages = 1_000
 const defaultConcurrency = 4
 const defaultTimeoutMs = 120_000
 const defaultRequestTimeoutMs = 30_000
@@ -55,7 +58,7 @@ async function resolveConfigurationArtifact(
   build: TeamCityBuild,
   configuration: BuildArtifactSearchConfiguration,
   signal: AbortSignal,
-  deadline: number,
+  timeoutMs: number,
   requestTimeoutMs: number,
 ): Promise<ConfigurationArtifactResult> {
   const platforms: readonly MobilePlatform[] = configuration.platform === 'other'
@@ -70,7 +73,7 @@ async function resolveConfigurationArtifact(
       platform,
       {
         signal,
-        timeoutMs: Math.max(1, deadline - Date.now()),
+        timeoutMs,
         requestTimeoutMs,
       },
     )
@@ -106,11 +109,18 @@ export async function searchBuildArtifacts(
       failedConfigurations: 0,
       failedBuilds: 0,
       ambiguousBuilds: 0,
+      failedBuildPages: 0,
       transport: 'service-worker',
     }
   }
 
-  const maximumBuilds = boundedInteger(options.maximumBuilds, defaultMaximumBuilds, 1, 20)
+  const pageSize = boundedInteger(options.pageSize, defaultPageSize, 1, 100)
+  const maximumPages = boundedInteger(
+    options.maximumPages,
+    defaultMaximumPages,
+    1,
+    defaultMaximumPages,
+  )
   const concurrency = boundedInteger(options.concurrency, defaultConcurrency, 1, 4)
   const timeoutMs = boundedInteger(options.timeoutMs, defaultTimeoutMs, 1, defaultTimeoutMs)
   const requestTimeoutMs = boundedInteger(
@@ -125,114 +135,144 @@ export async function searchBuildArtifacts(
   if (options.signal?.aborted) {
     controller.abort()
   }
-  const deadline = Date.now() + timeoutMs
-  const timeout = window.setTimeout(() => controller.abort(), timeoutMs)
 
   try {
-    const buildResult = await service.loadBuilds([...uniqueConfigurations.keys()], {
-      maximumBuilds,
-      query: options.query,
-      requestTimeoutMs,
-      signal: controller.signal,
-    })
-    const builds = buildResult.builds
-      .filter((build) => uniqueConfigurations.has(build.buildTypeId))
-      .slice(0, maximumBuilds)
-    const matches: Array<BuildArtifactMatch | undefined> = new Array(builds.length)
-    let cursor = 0
+    const orderedBuildIds: string[] = []
+    const processedBuildIds = new Set<string>()
+    const matches = new Map<string, BuildArtifactMatch>()
     let completedResolutions = 0
     let failedResolutions = 0
     let ambiguousResolutions = 0
+    let failedBuildPages = 0
     let firstResolutionError: unknown
+    let transport: TeamCityTransportKind = 'service-worker'
+
+    const currentMatches = () => orderedBuildIds.flatMap((id) => {
+      const match = matches.get(id)
+      return match === undefined ? [] : [match]
+    })
 
     const notifyProgress = () => {
       try {
         options.onProgress?.({
-          matches: matches.filter((match) => match !== undefined),
+          matches: currentMatches(),
           checkedBuilds: completedResolutions + failedResolutions,
-          failedConfigurations: buildResult.failedConfigurations,
+          failedConfigurations: 0,
           failedBuilds: failedResolutions,
           ambiguousBuilds: ambiguousResolutions,
-          transport: buildResult.transport,
+          failedBuildPages,
+          transport,
         })
       } catch {
         // UI progress reporting must never affect the TeamCity search.
       }
     }
 
-    const worker = async () => {
-      while (!controller.signal.aborted) {
-        const index = cursor
-        cursor += 1
-        const build = builds[index]
-        if (build === undefined) {
-          return
+    const processBuildPage = async (pageBuilds: readonly TeamCityBuild[]) => {
+      const builds = pageBuilds.filter((build) => {
+        if (!uniqueConfigurations.has(build.buildTypeId) || processedBuildIds.has(build.id)) {
+          return false
         }
-
-        const configuration = uniqueConfigurations.get(build.buildTypeId)
-        if (configuration === undefined) {
-          continue
-        }
-
-        try {
-          const artifactResult = await resolveConfigurationArtifact(
-            service,
-            build,
-            configuration,
-            controller.signal,
-            deadline,
-            requestTimeoutMs,
-          )
-          if (controller.signal.aborted) {
+        processedBuildIds.add(build.id)
+        orderedBuildIds.push(build.id)
+        return true
+      })
+      let cursor = 0
+      const worker = async () => {
+        while (!controller.signal.aborted) {
+          const build = builds[cursor]
+          cursor += 1
+          if (build === undefined) {
             return
           }
-          if (artifactResult.status === 'Resolved') {
-            matches[index] = {
+          const configuration = uniqueConfigurations.get(build.buildTypeId)
+          if (configuration === undefined) {
+            continue
+          }
+
+          try {
+            const artifactResult = await resolveConfigurationArtifact(
+              service,
               build,
-              configuration: {
-                id: configuration.id,
-                name: configuration.name,
-                platform: artifactResult.platform,
-              },
-              artifact: artifactResult.artifact,
+              configuration,
+              controller.signal,
+              timeoutMs,
+              requestTimeoutMs,
+            )
+            if (controller.signal.aborted) {
+              return
             }
-          } else if (artifactResult.status === 'Ambiguous') {
-            ambiguousResolutions += 1
+            if (artifactResult.status === 'Resolved') {
+              matches.set(build.id, {
+                build,
+                configuration: {
+                  id: configuration.id,
+                  name: configuration.name,
+                  platform: artifactResult.platform,
+                },
+                artifact: artifactResult.artifact,
+              })
+            } else if (artifactResult.status === 'Ambiguous') {
+              ambiguousResolutions += 1
+            }
+            completedResolutions += 1
+            notifyProgress()
+          } catch (error) {
+            if (controller.signal.aborted) {
+              return
+            }
+            failedResolutions += 1
+            firstResolutionError ??= error
+            notifyProgress()
           }
-          completedResolutions += 1
-          notifyProgress()
-        } catch (error) {
-          if (controller.signal.aborted) {
-            return
-          }
-          failedResolutions += 1
-          firstResolutionError ??= error
-          notifyProgress()
         }
       }
+
+      await Promise.all(
+        Array.from({ length: Math.min(concurrency, builds.length) }, () => worker()),
+      )
     }
 
-    await Promise.all(
-      Array.from({ length: Math.min(concurrency, builds.length) }, () => worker()),
-    )
+    let buildResult
+    try {
+      buildResult = await service.loadBuilds([...uniqueConfigurations.keys()], {
+        pageSize,
+        maximumPages,
+        query: options.query,
+        requestTimeoutMs,
+        signal: controller.signal,
+        onPage: async (page) => {
+          transport = page.transport
+          await processBuildPage(page.builds)
+        },
+      })
+      transport = buildResult.transport
+      await processBuildPage(buildResult.builds)
+    } catch (error) {
+      if (controller.signal.aborted || completedResolutions + failedResolutions === 0) {
+        throw error
+      }
+      failedBuildPages = 1
+      notifyProgress()
+    }
 
     if (controller.signal.aborted) {
-      throw new TeamCityError('RequestTimeout', 'TeamCity build artifact search timed out.')
+      throw new TeamCityError('RequestTimeout', 'TeamCity build artifact search was stopped.')
     }
     if (completedResolutions === 0 && firstResolutionError !== undefined) {
       throw firstResolutionError
     }
 
     return {
-      matches: matches.filter((match) => match !== undefined),
-      checkedBuilds: builds.length,
-      failedConfigurations: buildResult.failedConfigurations,
+      matches: currentMatches(),
+      checkedBuilds: completedResolutions + failedResolutions,
+      failedConfigurations: buildResult?.failedConfigurations ?? 0,
       failedBuilds: failedResolutions,
       ambiguousBuilds: ambiguousResolutions,
-      transport: buildResult.transport,
+      failedBuildPages,
+      transport,
     }
   } finally {
-    window.clearTimeout(timeout)
     options.signal?.removeEventListener('abort', abortFromCaller)
   }
 }

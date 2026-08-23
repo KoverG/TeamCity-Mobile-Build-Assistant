@@ -27,12 +27,16 @@ export interface BuildsResult {
 
 export interface BuildLoadOptions {
   maximumBuilds?: number
+  pageSize?: number
+  maximumPages?: number
   query?: BuildSearchQuery
   signal?: AbortSignal
   requestTimeoutMs?: number
+  onPage?(result: BuildsResult): void | Promise<void>
 }
 
-const maximumPages = 20
+const defaultPageSize = 50
+const defaultMaximumPages = 1_000
 
 function parseBuild(value: unknown): TeamCityBuild | undefined {
   const record = asRecord(value)
@@ -93,14 +97,23 @@ function searchLocator(query: BuildSearchQuery | undefined): string[] {
 }
 
 export function createSuccessfulBuildsPath(
-  buildTypeId: string,
-  count = 20,
+  buildTypeIds: string | readonly string[],
+  count = defaultPageSize,
   searchQuery?: BuildSearchQuery,
 ): string {
-  const safeBuildTypeId = assertOpaqueId(buildTypeId, 'buildTypeId')
-  const safeCount = boundedInteger(count, 20, 1, 100)
+  const safeBuildTypeIds = [...new Set(
+    (typeof buildTypeIds === 'string' ? [buildTypeIds] : buildTypeIds)
+      .map((buildTypeId) => assertOpaqueId(buildTypeId, 'buildTypeId')),
+  )]
+  if (safeBuildTypeIds.length === 0) {
+    throw new TeamCityError('InvalidRequest', 'At least one buildTypeId is required.')
+  }
+  const buildTypeLocator = safeBuildTypeIds.length === 1
+    ? `buildType:(id:${safeBuildTypeIds[0]})`
+    : `buildType:(${safeBuildTypeIds.map((id) => `item:(id:${id})`).join(',')})`
+  const safeCount = boundedInteger(count, defaultPageSize, 1, 100)
   const locator = [
-    `buildType:(id:${safeBuildTypeId})`,
+    buildTypeLocator,
     'state:finished',
     'status:SUCCESS',
     ...searchLocator(searchQuery),
@@ -115,7 +128,7 @@ export function createSuccessfulBuildsPath(
 
 export async function loadSuccessfulBuilds(
   client: TeamCityHttpClient,
-  buildTypeId: string,
+  buildTypeIds: string | readonly string[],
   options: BuildLoadOptions = {},
 ): Promise<BuildsResult> {
   const builds = new Map<string, TeamCityBuild>()
@@ -123,18 +136,31 @@ export async function loadSuccessfulBuilds(
   const maximumBuilds = Number.isFinite(requestedMaximum)
     ? Math.min(Math.max(requestedMaximum, 1), Number.MAX_SAFE_INTEGER)
     : Number.MAX_SAFE_INTEGER
-  const firstPageCount = options.maximumBuilds === undefined
-    ? 20
-    : Math.min(maximumBuilds, 100)
+  const pageSize = boundedInteger(options.pageSize, defaultPageSize, 1, 100)
+  const firstPageCount = Math.min(pageSize, maximumBuilds)
+  const maximumPages = boundedInteger(
+    options.maximumPages,
+    defaultMaximumPages,
+    1,
+    defaultMaximumPages,
+  )
   let nextPath: string | undefined = createSuccessfulBuildsPath(
-    buildTypeId,
+    buildTypeIds,
     firstPageCount,
     options.query,
   )
   let transport: TeamCityTransportKind = 'service-worker'
+  const visitedPaths = new Set<string>()
 
   let page = 0
   for (; nextPath !== undefined && page < maximumPages && builds.size < maximumBuilds; page += 1) {
+    if (visitedPaths.has(nextPath)) {
+      throw new TeamCityError(
+        'TraversalLimitExceeded',
+        'TeamCity builds pagination returned a repeated page.',
+      )
+    }
+    visitedPaths.add(nextPath)
     const response = await client.getJson<unknown>(nextPath, {
       signal: options.signal,
       timeoutMs: options.requestTimeoutMs,
@@ -146,10 +172,15 @@ export async function loadSuccessfulBuilds(
       throw new TeamCityError('UnexpectedResponse', 'TeamCity builds response is invalid.')
     }
 
+    const pageBuilds: TeamCityBuild[] = []
     for (const build of readArray(root.build).map(parseBuild).filter((item) => item !== undefined)) {
-      if (builds.size < maximumBuilds) {
+      if (builds.size < maximumBuilds && !builds.has(build.id)) {
         builds.set(build.id, build)
+        pageBuilds.push(build)
       }
+    }
+    if (pageBuilds.length > 0) {
+      await options.onPage?.({ builds: pageBuilds, transport })
     }
 
     const nextHref = readString(root.nextHref)

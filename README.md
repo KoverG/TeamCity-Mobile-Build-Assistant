@@ -6,6 +6,12 @@
 
 **Быстрый поиск APK и IPA в успешных сборках TeamCity — прямо на странице проекта.**
 
+<p>
+  <a href="https://github.com/KoverG/TeamCity-Mobile-Build-Assistant/actions/workflows/ci.yml"><img src="https://github.com/KoverG/TeamCity-Mobile-Build-Assistant/actions/workflows/ci.yml/badge.svg" alt="CI passing"></a>
+  <a href="LICENSE"><img src="docs/assets/readme/badge-license-mit.svg" alt="License MIT"></a>
+  <a href="extension/public/manifest.json"><img src="docs/assets/readme/badge-manifest-v3.svg" alt="Manifest V3"></a>
+</p>
+
 **Формат поставки:** GitHub Release ZIP · **Лицензия:** MIT · **Платформа:** Chromium Manifest V3
 
 [Скачать готовую сборку](https://github.com/KoverG/TeamCity-Mobile-Build-Assistant/releases/latest) · [Собрать самостоятельно](#самостоятельная-сборка) · [Возможности](#что-умеет-расширение)

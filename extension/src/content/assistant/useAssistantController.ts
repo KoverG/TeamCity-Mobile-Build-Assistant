@@ -331,6 +331,9 @@ function getSearchWarningMessage(result: BuildArtifactSearchResult): string | un
       `Неоднозначные результаты: несколько подходящих артефактов найдено в ${result.ambiguousBuilds} из ${result.checkedBuilds} проверок.`,
     )
   }
+  if (result.failedBuildPages > 0) {
+    messages.push('Результаты неполные: TeamCity не отдал следующую страницу сборок.')
+  }
   return messages.length === 0 ? undefined : messages.join(' ')
 }
 
@@ -557,7 +560,7 @@ export function useAssistantController({
     )
     try {
       const result = await searchBuildArtifacts(service, configurations, {
-        maximumBuilds: 20,
+        pageSize: 50,
         concurrency: 4,
         query: normalizedQuery.length === 0
           ? undefined

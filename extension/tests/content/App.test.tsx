@@ -400,7 +400,7 @@ describe('App', () => {
 
     expect(service.loadBuilds).toHaveBeenCalledWith(
       ['Synthetic_Mobile_ios_prod'],
-      expect.objectContaining({ maximumBuilds: 20 }),
+      expect.objectContaining({ pageSize: 50 }),
     )
     expect(service.resolveArtifact).toHaveBeenCalledWith(
       '12345',
@@ -528,7 +528,7 @@ describe('App', () => {
 
     expect(service.loadBuilds).toHaveBeenCalledWith(
       ['Synthetic_Custom_Pipeline'],
-      expect.objectContaining({ maximumBuilds: 20 }),
+      expect.objectContaining({ pageSize: 50 }),
     )
     expect(service.resolveArtifact).toHaveBeenNthCalledWith(
       1,
@@ -705,7 +705,7 @@ describe('App', () => {
 
     expect(service.loadBuilds).toHaveBeenCalledWith(
       ['Synthetic_Mobile_android_stage', 'Synthetic_Mobile_ios_prod'],
-      expect.objectContaining({ maximumBuilds: 20 }),
+      expect.objectContaining({ pageSize: 50 }),
     )
     expect(screen.queryByText('Synthetic Custom')).not.toBeInTheDocument()
     expect(storage.clear).toHaveBeenCalledWith('https://teamcity.example.test')

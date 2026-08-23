@@ -14,11 +14,21 @@ describe('BuildFinder', () => {
     expect(locator).toContain('count:100')
   })
 
+  it('combines build configurations into one TeamCity locator', () => {
+    const path = createSuccessfulBuildsPath(['Synthetic_Android', 'Synthetic_iOS'])
+    const locator = new URLSearchParams(path.split('?')[1]).get('locator')
+
+    expect(locator).toContain(
+      'buildType:(item:(id:Synthetic_Android),item:(id:Synthetic_iOS))',
+    )
+    expect(locator).toContain('count:50')
+  })
+
   it('uses the default page size for a non-finite count', () => {
     const path = createSuccessfulBuildsPath('Example_Mobile', Number.NaN)
     const locator = new URLSearchParams(path.split('?')[1]).get('locator')
 
-    expect(locator).toContain('count:20')
+    expect(locator).toContain('count:50')
   })
 
   it('uses an encoded case-insensitive partial branch condition for task search', () => {
@@ -109,10 +119,28 @@ describe('BuildFinder', () => {
       ]),
     )
 
-    const result = await loadSuccessfulBuilds(client, 'Synthetic_Mobile')
+    const pageBuildIds: string[][] = []
+    const result = await loadSuccessfulBuilds(client, 'Synthetic_Mobile', {
+      onPage: ({ builds }) => {
+        pageBuildIds.push(builds.map(({ id }) => id))
+      },
+    })
+
+    expect(pageBuildIds).toEqual([['1'], ['2']])
 
     expect(result.builds.map(({ id }) => id)).toEqual(['1', '2'])
     expect(client.requestedPaths).toEqual([firstPath, secondPath])
+  })
+
+  it('stops when TeamCity repeats the same pagination link', async () => {
+    const path = createSuccessfulBuildsPath('Synthetic_Looped')
+    const client = new FakeTeamCityHttpClient(
+      new Map([[path, { build: [], nextHref: path }]]),
+    )
+
+    await expect(loadSuccessfulBuilds(client, 'Synthetic_Looped'))
+      .rejects.toMatchObject({ code: 'TraversalLimitExceeded' })
+    expect(client.requestedPaths).toEqual([path])
   })
 
   it('stops at the requested build limit without following another page', async () => {

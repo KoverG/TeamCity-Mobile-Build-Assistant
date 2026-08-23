@@ -55,4 +55,24 @@ describe('BuildResults partial search warning', () => {
 
     expect(onRetry).toHaveBeenCalledOnce()
   })
+  it('keeps found cards visible and replaces the bulk copy action while search continues', () => {
+    render(
+      <BuildResults
+        status="loading"
+        hasSearched
+        matches={[match]}
+        selectedBuildIds={new Set()}
+        onRetry={vi.fn()}
+        onToggle={vi.fn()}
+        onCopy={vi.fn()}
+        onDownload={vi.fn()}
+        onOpenBuild={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: 'Открыть билд #42 в TeamCity' })).toBeVisible()
+    expect(screen.getByRole('status', { name: 'Поиск сборок продолжается' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: /Копировать все/ })).not.toBeInTheDocument()
+    expect(screen.queryByText('Ищем сборки...')).not.toBeInTheDocument()
+  })
 })

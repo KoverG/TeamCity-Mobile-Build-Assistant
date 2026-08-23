@@ -16,8 +16,6 @@ import {
   type TeamCityHttpClient,
 } from './TeamCityTransport'
 
-const buildConfigurationConcurrency = 4
-
 export interface LoadedBuildsResult extends BuildsResult {
   failedConfigurations: number
 }
@@ -46,46 +44,17 @@ export function createTeamCityService(
     },
     async loadBuilds(buildTypeIds, options) {
       const uniqueBuildTypeIds = [...new Set(buildTypeIds)]
-      const results: Array<BuildsResult | undefined> = new Array(uniqueBuildTypeIds.length)
-      const failures: Array<unknown | undefined> = new Array(uniqueBuildTypeIds.length)
-      let cursor = 0
-      const worker = async () => {
-        while (cursor < uniqueBuildTypeIds.length) {
-          const index = cursor
-          cursor += 1
-          const buildTypeId = uniqueBuildTypeIds[index]
-          if (buildTypeId !== undefined) {
-            try {
-              results[index] = await loadSuccessfulBuilds(client, buildTypeId, options)
-            } catch (error) {
-              if (options?.signal?.aborted) {
-                throw error
-              }
-              failures[index] = error
-            }
-          }
+      if (uniqueBuildTypeIds.length === 0) {
+        return {
+          builds: [],
+          failedConfigurations: 0,
+          transport: 'service-worker',
         }
       }
-      await Promise.all(
-        Array.from(
-          { length: Math.min(buildConfigurationConcurrency, uniqueBuildTypeIds.length) },
-          () => worker(),
-        ),
-      )
-      const completedResults = results.filter((result) => result !== undefined)
-      const firstFailure = failures.find((error) => error !== undefined)
-      if (completedResults.length === 0 && firstFailure !== undefined) {
-        throw firstFailure
-      }
-      const builds = new Map(
-        completedResults.flatMap((result) => result.builds).map((build) => [build.id, build]),
-      )
+      const result = await loadSuccessfulBuilds(client, uniqueBuildTypeIds, options)
       return {
-        builds: [...builds.values()].sort((left, right) =>
-          (right.finishDate ?? '').localeCompare(left.finishDate ?? ''),
-        ),
-        failedConfigurations: failures.filter((error) => error !== undefined).length,
-        transport: completedResults.at(-1)?.transport ?? 'service-worker',
+        ...result,
+        failedConfigurations: 0,
       }
     },
     resolveArtifact(buildId, buildTypeId, platform, options) {

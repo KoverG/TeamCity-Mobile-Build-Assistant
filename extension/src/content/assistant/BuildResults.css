@@ -482,6 +482,17 @@
   padding-top: 0;
 }
 
+.tcba-results__footer-loader {
+  display: grid;
+  height: 40px;
+  place-items: center;
+}
+
+.tcba-results__footer-loader > img {
+  width: 32px;
+  height: 32px;
+}
+
 .tcba-action-button {
   display: inline-flex;
   min-width: 0;

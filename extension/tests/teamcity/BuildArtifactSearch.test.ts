@@ -53,50 +53,72 @@ function resolution(index: number): ArtifactResolution {
 }
 
 describe('searchBuildArtifacts', () => {
-  it('checks at most 20 builds with bounded artifact concurrency and keeps only resolved matches', async () => {
+  it('checks every page with bounded artifact concurrency and publishes results immediately', async () => {
     const builds = Array.from({ length: 25 }, (_, index) => build(index))
     let activeResolutions = 0
     let maximumConcurrency = 0
-    const service: TeamCityService = {
-      loadCatalog: vi.fn(),
-      loadBuilds: vi.fn().mockResolvedValue({
+    const resolveArtifact = vi.fn(async (buildId: string) => {
+      activeResolutions += 1
+      maximumConcurrency = Math.max(maximumConcurrency, activeResolutions)
+      await new Promise((resolve) => window.setTimeout(resolve, 2))
+      activeResolutions -= 1
+      return resolution(Number(buildId))
+    })
+    const loadBuilds = vi.fn(async (
+      _buildTypeIds: readonly string[],
+      options?: Parameters<TeamCityService['loadBuilds']>[1],
+    ) => {
+      await options?.onPage?.({
+        builds: builds.slice(0, 20),
+        transport: 'main-world',
+      })
+      expect(resolveArtifact).toHaveBeenCalledTimes(20)
+      await options?.onPage?.({
+        builds: builds.slice(20),
+        transport: 'main-world',
+      })
+      return {
         builds,
         failedConfigurations: 0,
-        transport: 'main-world',
-      }),
-      resolveArtifact: vi.fn(async (buildId: string) => {
-        activeResolutions += 1
-        maximumConcurrency = Math.max(maximumConcurrency, activeResolutions)
-        await new Promise((resolve) => window.setTimeout(resolve, 2))
-        activeResolutions -= 1
-        return resolution(Number(buildId))
-      }),
+        transport: 'main-world' as const,
+      }
+    })
+    const service: TeamCityService = {
+      loadCatalog: vi.fn(),
+      loadBuilds,
+      resolveArtifact,
     }
     const configurations: BuildArtifactSearchConfiguration[] = [
       { id: 'Synthetic_Android', name: 'Android', platform: 'android' },
       { id: 'Synthetic_iOS', name: 'iOS', platform: 'ios' },
     ]
+    const progressCounts: number[] = []
 
     const result = await searchBuildArtifacts(service, configurations, {
-      maximumBuilds: 50,
+      pageSize: 50,
       concurrency: 8,
       query: { mode: 'task', value: 'synthetic-1' },
+      onProgress: (progress) => progressCounts.push(progress.checkedBuilds),
     })
 
-    expect(result.checkedBuilds).toBe(20)
+    expect(result.checkedBuilds).toBe(25)
     expect(result.failedConfigurations).toBe(0)
     expect(result.failedBuilds).toBe(0)
     expect(result.ambiguousBuilds).toBe(0)
-    expect(result.matches).toHaveLength(10)
+    expect(result.failedBuildPages).toBe(0)
+    expect(result.matches).toHaveLength(13)
     expect(result.matches.every(({ artifact }) => artifact.size === 128 * 1024 * 1024)).toBe(true)
-    expect(service.resolveArtifact).toHaveBeenCalledTimes(20)
-    expect(service.loadBuilds).toHaveBeenCalledWith(
+    expect(resolveArtifact).toHaveBeenCalledTimes(25)
+    expect(loadBuilds).toHaveBeenCalledWith(
       ['Synthetic_Android', 'Synthetic_iOS'],
       expect.objectContaining({
-        maximumBuilds: 20,
+        pageSize: 50,
+        maximumPages: 1_000,
         query: { mode: 'task', value: 'synthetic-1' },
       }),
     )
+    expect(progressCounts).toContain(20)
+    expect(progressCounts.at(-1)).toBe(25)
     expect(maximumConcurrency).toBeLessThanOrEqual(4)
   })
 
@@ -113,6 +135,7 @@ describe('searchBuildArtifacts', () => {
       failedConfigurations: 0,
       failedBuilds: 0,
       ambiguousBuilds: 0,
+      failedBuildPages: 0,
       transport: 'service-worker',
     })
     expect(service.loadBuilds).not.toHaveBeenCalled()
@@ -144,6 +167,31 @@ describe('searchBuildArtifacts', () => {
     expect(result.checkedBuilds).toBe(3)
     expect(result.failedBuilds).toBe(1)
     expect(result.ambiguousBuilds).toBe(0)
+  })
+
+  it('keeps published matches when TeamCity fails to load the next page', async () => {
+    const service: TeamCityService = {
+      loadCatalog: vi.fn(),
+      loadBuilds: vi.fn(async (
+        _buildTypeIds: readonly string[],
+        options?: Parameters<TeamCityService['loadBuilds']>[1],
+      ) => {
+        await options?.onPage?.({
+          builds: [build(0)],
+          transport: 'main-world',
+        })
+        throw new Error('Synthetic next page failure.')
+      }),
+      resolveArtifact: vi.fn(async (buildId: string) => resolution(Number(buildId))),
+    }
+
+    const result = await searchBuildArtifacts(service, [
+      { id: 'Synthetic_Android', name: 'Android', platform: 'android' },
+    ])
+
+    expect(result.matches.map(({ build: item }) => item.id)).toEqual(['0'])
+    expect(result.checkedBuilds).toBe(1)
+    expect(result.failedBuildPages).toBe(1)
   })
 
   it('preserves matches and reports failed build configurations', async () => {

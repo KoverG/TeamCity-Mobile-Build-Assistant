@@ -5,6 +5,17 @@ import { createSuccessfulBuildsPath } from '../../src/teamcity/BuildFinder'
 import { createTeamCityService } from '../../src/teamcity/TeamCityService'
 import type { TeamCityHttpClient, TeamCityJsonResult } from '../../src/teamcity/TeamCityTransport'
 
+function successfulBuild(id: string, buildTypeId: string) {
+  return {
+    id,
+    buildTypeId,
+    number: id,
+    status: 'SUCCESS',
+    state: 'finished',
+    defaultBranch: true,
+  }
+}
+
 describe('createTeamCityService', () => {
   it('connects artifact resolution to the bulk TeamCity GET', async () => {
     const bulkPath = createArtifactBulkPath('801', 'android')
@@ -32,116 +43,92 @@ describe('createTeamCityService', () => {
     expect(client.requestedPaths).toEqual([bulkPath])
   })
 
-  it('bounds parallel build-configuration requests', async () => {
-    let activeRequests = 0
-    let maximumConcurrency = 0
-    const requestedPaths: string[] = []
-    const client: TeamCityHttpClient = {
-      async getJson<T>(path: string): Promise<TeamCityJsonResult<T>> {
-        requestedPaths.push(path)
-        activeRequests += 1
-        maximumConcurrency = Math.max(maximumConcurrency, activeRequests)
-        await new Promise((resolve) => setTimeout(resolve, 2))
-        activeRequests -= 1
-        return {
-          data: { build: [] } as T,
-          transport: 'service-worker',
-          status: 200,
-        }
-      },
-    }
-    const service = createTeamCityService(client)
-
-    await service.loadBuilds(
-      Array.from({ length: 10 }, (_, index) => `Synthetic_Mobile_${index}`),
-      { maximumBuilds: 20 },
-    )
-
-    expect(requestedPaths).toHaveLength(10)
-    expect(maximumConcurrency).toBeLessThanOrEqual(4)
-  })
-
-  it('keeps successful build configurations when another configuration fails', async () => {
-    const successfulPath = createSuccessfulBuildsPath('Synthetic_Healthy', 20)
-    const failedPath = createSuccessfulBuildsPath('Synthetic_Failed', 20)
-    const requestedPaths: string[] = []
-    const client: TeamCityHttpClient = {
-      async getJson<T>(path: string): Promise<TeamCityJsonResult<T>> {
-        requestedPaths.push(path)
-        if (path === failedPath) {
-          throw new Error('Synthetic configuration failure.')
-        }
-        if (path !== successfulPath) {
-          throw new Error('Unexpected synthetic path.')
-        }
-        return {
-          data: {
-            build: [{
-              id: '1001',
-              buildTypeId: 'Synthetic_Healthy',
-              number: '42',
-              status: 'SUCCESS',
-              state: 'finished',
-              defaultBranch: true,
-            }],
-          } as T,
-          transport: 'main-world',
-          status: 200,
-        }
-      },
-    }
-    const service = createTeamCityService(client)
-
-    const result = await service.loadBuilds(
-      ['Synthetic_Healthy', 'Synthetic_Failed'],
-      { maximumBuilds: 20 },
-    )
-
-    expect(result.builds.map(({ id }) => id)).toEqual(['1001'])
-    expect(result.failedConfigurations).toBe(1)
-    expect(requestedPaths).toEqual(expect.arrayContaining([successfulPath, failedPath]))
-  })
-
-  it('keeps the regular error when every build configuration fails', async () => {
-    const requestedPaths: string[] = []
-    const client: TeamCityHttpClient = {
-      async getJson<T>(path: string): Promise<TeamCityJsonResult<T>> {
-        requestedPaths.push(path)
-        throw new Error('Synthetic total configuration failure.')
-      },
-    }
-    const service = createTeamCityService(client)
-
-    await expect(
-      service.loadBuilds(['Synthetic_Failed_A', 'Synthetic_Failed_B'], {
-        maximumBuilds: 20,
-      }),
-    ).rejects.toThrow('Synthetic total configuration failure.')
-    expect(requestedPaths).toHaveLength(2)
-  })
-
-  it('does not convert caller cancellation into a partial configuration failure', async () => {
-    const path = createSuccessfulBuildsPath('Synthetic_Cancelled', 20)
+  it('loads several configurations through one combined TeamCity request', async () => {
+    const buildTypeIds = ['Synthetic_Android', 'Synthetic_iOS']
+    const path = createSuccessfulBuildsPath(buildTypeIds)
     const client = new FakeTeamCityHttpClient(
       new Map([
         [
           path,
           {
-            build: [],
+            build: [
+              successfulBuild('1001', 'Synthetic_Android'),
+              successfulBuild('1002', 'Synthetic_iOS'),
+            ],
           },
         ],
       ]),
     )
+    const service = createTeamCityService(client)
+
+    const result = await service.loadBuilds(buildTypeIds)
+
+    expect(result.builds.map(({ id }) => id)).toEqual(['1001', '1002'])
+    expect(result.failedConfigurations).toBe(0)
+    expect(client.requestedPaths).toEqual([path])
+  })
+
+  it('does not call TeamCity for an empty configuration list', async () => {
+    const client = new FakeTeamCityHttpClient(new Map())
+    const service = createTeamCityService(client)
+
+    await expect(service.loadBuilds([])).resolves.toEqual({
+      builds: [],
+      failedConfigurations: 0,
+      transport: 'service-worker',
+    })
+    expect(client.requestedPaths).toEqual([])
+  })
+
+  it('keeps the regular error when the combined build request fails', async () => {
+    const client: TeamCityHttpClient = {
+      async getJson<T>(): Promise<TeamCityJsonResult<T>> {
+        throw new Error('Synthetic combined request failure.')
+      },
+    }
+    const service = createTeamCityService(client)
+
+    await expect(
+      service.loadBuilds(['Synthetic_Failed_A', 'Synthetic_Failed_B']),
+    ).rejects.toThrow('Synthetic combined request failure.')
+  })
+
+  it('does not make a request after caller cancellation', async () => {
+    const path = createSuccessfulBuildsPath('Synthetic_Cancelled')
+    const client = new FakeTeamCityHttpClient(new Map([[path, { build: [] }]]))
     const controller = new AbortController()
     controller.abort()
     const service = createTeamCityService(client)
 
     await expect(
-      service.loadBuilds(['Synthetic_Cancelled'], {
-        maximumBuilds: 20,
-        signal: controller.signal,
-      }),
+      service.loadBuilds(['Synthetic_Cancelled'], { signal: controller.signal }),
     ).rejects.toMatchObject({ name: 'AbortError' })
     expect(client.requestedPaths).toEqual([])
+  })
+
+  it('forwards each loaded page before returning the complete result', async () => {
+    const firstPath = createSuccessfulBuildsPath('Synthetic_Paged')
+    const secondPath = '/app/rest/builds?page=2'
+    const client = new FakeTeamCityHttpClient(new Map([
+      [
+        firstPath,
+        {
+          build: [successfulBuild('1001', 'Synthetic_Paged')],
+          nextHref: secondPath,
+        },
+      ],
+      [secondPath, { build: [successfulBuild('1002', 'Synthetic_Paged')] }],
+    ]))
+    const pageBuildIds: string[][] = []
+    const service = createTeamCityService(client)
+
+    const result = await service.loadBuilds(['Synthetic_Paged'], {
+      onPage: ({ builds }) => {
+        pageBuildIds.push(builds.map(({ id }) => id))
+      },
+    })
+
+    expect(pageBuildIds).toEqual([['1001'], ['1002']])
+    expect(result.builds.map(({ id }) => id)).toEqual(['1001', '1002'])
   })
 })

@@ -5,6 +5,7 @@ import type { TeamCityHttpClient } from './TeamCityTransport'
 
 export interface SessionProbeResult {
   authenticated: true
+  userId: string
   transport: TeamCityTransportKind
 }
 
@@ -12,12 +13,14 @@ export async function probeSession(client: TeamCityHttpClient): Promise<SessionP
   const response = await client.getJson<unknown>('/app/rest/users/current?fields=id')
   const user = asRecord(response.data)
 
-  if (user === undefined || readOpaqueString(user.id) === undefined) {
+  const userId = user === undefined ? undefined : readOpaqueString(user.id)
+  if (userId === undefined) {
     throw new TeamCityError('UnexpectedResponse', 'TeamCity current user response is invalid.')
   }
 
   return {
     authenticated: true,
+    userId,
     transport: response.transport,
   }
 }

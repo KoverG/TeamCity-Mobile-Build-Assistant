@@ -81,14 +81,14 @@
   align-items: center;
   flex-direction: column;
   overflow: hidden;
-  padding: 0 0 14px;
+  padding: 0 0 33px;
   text-align: center;
 }
 
 .tcba-results-state__visual {
   display: grid;
   width: 100%;
-  max-height: 292px;
+  max-height: 308px;
   min-height: 0;
   flex: 1 1 auto;
   place-items: center;
@@ -103,6 +103,7 @@
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
+  transform: translateY(15px);
 }
 
 .tcba-results-state > strong {
@@ -122,13 +123,13 @@
 }
 
 .tcba-results-state--hello .tcba-results-state__mascot {
-  max-width: 214px;
-  max-height: 268px;
+  max-width: 231px;
+  max-height: 289px;
 }
 
 .tcba-results-state--not-found .tcba-results-state__mascot {
-  max-width: 230px;
-  max-height: 288px;
+  max-width: 249px;
+  max-height: 312px;
 }
 
 .tcba-results-state__waiting-visual {
@@ -138,9 +139,13 @@
 
 .tcba-results-state--waiting .tcba-results-state__mascot {
   z-index: 1;
-  max-width: 208px;
-  max-height: 243px;
+  max-width: 222px;
+  max-height: 259px;
   animation: tcba-mascot-float 2.8s ease-in-out infinite;
+}
+
+.tcba-results-state--waiting {
+  padding-bottom: 10px;
 }
 
 .tcba-results-state__shadow {
@@ -155,10 +160,10 @@
 }
 
 .tcba-results-state__loader {
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
-  margin-top: 10px;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  margin-top: 5px;
 }
 
 .tcba-results-error {
@@ -384,7 +389,7 @@
   display: grid;
   width: 28px;
   height: 58px;
-  grid-template-rows: 20px 20px 18px;
+  grid-template-rows: 29px 20px 9px;
   align-items: center;
   justify-items: center;
   color: var(--tcba-color-disabled);
@@ -393,8 +398,9 @@
 
 .tcba-build-card__platform svg {
   grid-row: 1;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
+  align-self: end;
 }
 
 .tcba-build-card__platform small {
@@ -402,6 +408,7 @@
   color: var(--tcba-color-text);
   font-size: 14px;
   line-height: 18px;
+  align-self: end;
 }
 
 .tcba-build-card__content {
@@ -580,8 +587,8 @@
 }
 
 @keyframes tcba-mascot-float {
-  0%, 100% { transform: translateY(4px); }
-  50% { transform: translateY(-9px); }
+  0%, 100% { transform: translateY(27px); }
+  50% { transform: translateY(14px); }
 }
 
 @keyframes tcba-mascot-shadow {

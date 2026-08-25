@@ -14,6 +14,7 @@ export interface BuildConfiguration {
 
 export interface CatalogResult {
   configurations: BuildConfiguration[]
+  sessionUserId?: string
   skippedConfigurations: number
   transport: TeamCityTransportKind
 }

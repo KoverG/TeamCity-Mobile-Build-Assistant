@@ -2,7 +2,7 @@
 
 - Статус: обезличенный контракт интеграции, обязательный для публичного repository
 - Дата исследования: 2026-08-08
-- Последнее обновление: 2026-08-15 (версия 1.0.0)
+- Последнее обновление: 2026-08-25 (версия 1.4.0)
 
 Связанные документы:
 
@@ -22,6 +22,7 @@ TeamCity origin определяется во время работы из `wind
 - `CatalogLoader` — проекты и build configurations;
 - `BuildConfigurationClassifier` — конфигурируемая классификация;
 - `BuildFinder` — ограниченная загрузка finished/successful builds;
+- `BuildSearchOptions` — bounded user-scoped индекс номеров builds и идентификаторов задач;
 - `BuildArtifactSearch` — суммарное ограничение builds и concurrency поиска artifacts;
 - `ArtifactResolver` — поиск APK/IPA в дереве artifacts.
 
@@ -93,7 +94,7 @@ buildType:(id:<build-type-id>),state:finished,status:SUCCESS,branch:default:any
 Запрашиваемые поля должны быть минимальными:
 
 ```text
-id,buildTypeId,number,status,state,branchName,defaultBranch,finishDate,webUrl
+id,buildTypeId,number,status,state,branchName,defaultBranch,finishDate
 ```
 
 Обязательные правила:
@@ -102,9 +103,10 @@ id,buildTypeId,number,status,state,branchName,defaultBranch,finishDate,webUrl
 - не считать отсутствие `branchName` ошибкой;
 - явно показывать branch в UI;
 - сохранять server-provided build ID как opaque string;
-- загружать builds одновременно не более чем для четырёх build configurations;
-- после объединения и сортировки обрабатывать не более 20 последних builds суммарно;
-- запускать не более четырёх ArtifactResolver одновременно;
+- основной поиск постранично обрабатывает builds с аварийным пределом страниц и запускает не более четырёх ArtifactResolver одновременно;
+- индекс доступных значений загружается только после выбора проекта, делит чрезмерный locator на chunks не более 20 configurations и 1800 символов;
+- одновременно выполняются не более двух chunks; общий timeout индекса — 120 секунд, timeout одного запроса — 15 секунд;
+- индекс хранит только агрегированные значения в user-scoped session cache: максимум три проекта и idle TTL 10 минут;
 - не выполнять поиск artifacts до явной команды пользователя.
 
 ## 6. Artifact API и доменная модель

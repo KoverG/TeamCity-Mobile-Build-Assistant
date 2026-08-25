@@ -13,7 +13,7 @@
   left: 50%;
   width: 64px;
   height: 6px;
-  background: var(--tcba-color-primary);
+  background: #c8c8c8;
   border-radius: 99px;
   transform: translateX(-50%);
 }
@@ -514,52 +514,8 @@
   height: 12px;
 }
 
-.tcba-search-field__history {
-  max-height: 184px;
-  padding-right: 7px;
-  overflow: hidden;
-}
-
-.tcba-search-field__history-actions {
-  display: flex;
-  height: 34px;
-  align-items: center;
-  justify-content: flex-end;
-  border-bottom: 1px solid var(--tcba-color-border);
-}
-
-.tcba-search-field__history-list {
-  padding: 0;
-  margin: 0;
-  list-style: none;
-}
-
 .tcba-search-field--open .tcba-search-field__control {
   border-radius: 8px 8px 0 0;
-}
-
-.tcba-search-field__clear-history {
-  position: relative;
-  z-index: 1;
-  height: 21px;
-  padding: 1px 4px;
-  color: var(--tcba-color-primary);
-  background: transparent;
-  border: 1px solid var(--tcba-color-primary);
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 12px;
-  line-height: 17px;
-  transition:
-    color 150ms ease,
-    background-color 150ms ease,
-    border-color 150ms ease;
-}
-
-.tcba-search-field__clear-history:hover {
-  color: var(--tcba-color-primary-hover);
-  background: #fff0f3;
-  border-color: var(--tcba-color-primary-hover);
 }
 
 .tcba-theme-menu {
@@ -651,7 +607,6 @@
 .tcba-theme-menu__alternate:focus-visible,
 .tcba-search-field__clear:focus-visible,
 .tcba-search-field__modes button:focus-visible,
-.tcba-search-field__history *:focus-visible,
 .tcba-field-option:focus-visible {
   outline: 3px solid var(--tcba-color-focus);
   outline-offset: 2px;

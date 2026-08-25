@@ -17,12 +17,16 @@ import {
   type MobileEnvironment,
 } from '../../teamcity/BuildConfigurationClassifier'
 import type { TeamCityService } from '../../teamcity/TeamCityService'
-import { TeamCityError } from '../../teamcity/TeamCityError'
+import { getSafeTeamCityErrorMessage } from '../../teamcity/TeamCityErrorMessage'
 import {
   withRememberedQuery,
   type SearchHistory,
   type SearchHistoryStorage,
 } from '../../storage/SearchHistoryStorage'
+import {
+  useBuildSearchOptions,
+  type BuildSearchOptionsConfiguration,
+} from './useBuildSearchOptions'
 export type AssistantPlatformFilter = BuildArtifactSearchConfiguration['platform']
 const assistantPlatformFilters = ['android', 'ios', 'other'] as const
 
@@ -34,9 +38,10 @@ interface AssistantState {
   catalogStatus: CatalogStatus
   searchStatus: SearchStatus
   configurations: ClassifiedBuildConfiguration[]
+  sessionUserId: string
   selectedProjectId: string
   selectedPlatforms: AssistantPlatformFilter[]
-  selectedEnvironment: MobileEnvironment | ''
+  selectedEnvironments: MobileEnvironment[]
   searchMode: BuildSearchMode
   searchQueries: Record<BuildSearchMode, string>
   appliedSearch: AssistantSearchParameters
@@ -57,13 +62,14 @@ type AssistantAction =
       configurations: ClassifiedBuildConfiguration[]
       draft: AssistantSearchParameters
       appliedSearch: AssistantSearchParameters
+      sessionUserId: string
       searchHistory: SearchHistory
       warningMessage?: string
     }
   | { type: 'catalog-error'; message: string }
   | { type: 'select-project'; projectId: string }
   | { type: 'toggle-platform'; platform: AssistantPlatformFilter }
-  | { type: 'select-environment'; environment: MobileEnvironment | '' }
+  | { type: 'toggle-environment'; environment: MobileEnvironment }
   | { type: 'select-search-mode'; mode: BuildSearchMode }
   | { type: 'set-search-query'; mode: BuildSearchMode; query: string }
   | { type: 'search-loading'; appliedSearch: AssistantSearchParameters }
@@ -80,7 +86,7 @@ type AssistantAction =
 interface AssistantSelection {
   projectId: string
   platforms: AssistantPlatformFilter[]
-  environment: MobileEnvironment | ''
+  environments: MobileEnvironment[]
 }
 
 interface AssistantSearchParameters extends AssistantSelection {
@@ -104,18 +110,23 @@ export interface AssistantController {
   state: AssistantState
   projects: ProjectOption[]
   environments: MobileEnvironment[]
+  buildSearchOptions: string[]
+  buildSearchOptionsErrorMessage?: string
+  buildSearchOptionsStatus: ReturnType<typeof useBuildSearchOptions>['status']
   hasOtherConfigurations: boolean
   canSearch: boolean
   loadCatalog(): Promise<void>
   selectProject(projectId: string): void
   togglePlatform(platform: AssistantPlatformFilter): void
-  selectEnvironment(environment: MobileEnvironment | ''): void
+  toggleEnvironment(environment: MobileEnvironment): void
   selectSearchMode(mode: BuildSearchMode): void
   setSearchQuery(mode: BuildSearchMode, query: string): void
   clearSearchHistory(mode: BuildSearchMode): void
   resetSession(): void
+  refreshBuildSearchOptions(): void
   search(): Promise<boolean>
   stopSearch(): void
+  stopBuildSearchOptions(): void
   toggleBuild(buildId: string): void
 }
 
@@ -123,7 +134,7 @@ function emptySearchParameters(): AssistantSearchParameters {
   return {
     projectId: '',
     platforms: [],
-    environment: '',
+    environments: [],
     searchMode: 'task',
     queries: { task: '', build: '' },
   }
@@ -138,7 +149,8 @@ function createInitialState(
     configurations: [],
     selectedProjectId: '',
     selectedPlatforms: [],
-    selectedEnvironment: '',
+    sessionUserId: '',
+    selectedEnvironments: [],
     searchMode: 'task',
     searchQueries: { task: '', build: '' },
     appliedSearch: emptySearchParameters(),
@@ -165,9 +177,10 @@ function reducer(state: AssistantState, action: AssistantAction): AssistantState
         ...state,
         catalogStatus: 'ready',
         configurations: action.configurations,
+        sessionUserId: action.sessionUserId,
         selectedProjectId: action.draft.projectId,
         selectedPlatforms: action.draft.platforms,
-        selectedEnvironment: action.draft.environment,
+        selectedEnvironments: action.draft.environments,
         searchMode: action.draft.searchMode,
         searchQueries: action.draft.queries,
         appliedSearch: action.appliedSearch,
@@ -187,7 +200,8 @@ function reducer(state: AssistantState, action: AssistantAction): AssistantState
         ...state,
         selectedProjectId: action.projectId,
         selectedPlatforms: [],
-        selectedEnvironment: '',
+        selectedEnvironments: [],
+        searchQueries: { task: '', build: '' },
       }
     case 'toggle-platform': {
       const selectedPlatforms = state.selectedPlatforms.includes(action.platform)
@@ -196,14 +210,17 @@ function reducer(state: AssistantState, action: AssistantAction): AssistantState
       return {
         ...state,
         selectedPlatforms,
-        selectedEnvironment: '',
       }
     }
-    case 'select-environment':
+    case 'toggle-environment': {
+      const selectedEnvironments = state.selectedEnvironments.includes(action.environment)
+        ? state.selectedEnvironments.filter((environment) => environment !== action.environment)
+        : [...state.selectedEnvironments, action.environment]
       return {
         ...state,
-        selectedEnvironment: action.environment,
+        selectedEnvironments,
       }
+    }
     case 'select-search-mode':
       return { ...state, searchMode: action.mode }
     case 'set-search-query':
@@ -290,30 +307,6 @@ function reducer(state: AssistantState, action: AssistantAction): AssistantState
   }
 }
 
-function getSafeErrorMessage(error: unknown): string {
-  if (!(error instanceof TeamCityError)) {
-    return 'Не удалось прочитать данные TeamCity. Повторите попытку.'
-  }
-
-  switch (error.code) {
-    case 'NotAuthenticated':
-      return 'Авторизуйтесь в TeamCity в этой вкладке и повторите запрос.'
-    case 'Forbidden':
-      return 'У вашей TeamCity-учётной записи нет доступа к этим данным.'
-    case 'ResponseTooLarge':
-      return 'Ответ TeamCity слишком большой. Уточните параметры поиска.'
-    case 'TraversalLimitExceeded':
-      return 'Поиск остановлен безопасным ограничением. Уточните параметры.'
-    case 'RequestTimeout':
-      return 'TeamCity отвечает слишком долго. Повторите поиск.'
-    case 'InvalidRequest':
-      return 'TeamCity вернул неподдерживаемую ссылку.'
-    case 'TeamCityUnavailable':
-      return 'TeamCity сейчас недоступен. Повторите попытку.'
-    case 'UnexpectedResponse':
-      return 'TeamCity вернул ответ неизвестного формата.'
-  }
-}
 function getSearchWarningMessage(result: BuildArtifactSearchResult): string | undefined {
   const messages: string[] = []
   if (result.failedConfigurations > 0) {
@@ -382,15 +375,11 @@ function platformOptions(
 function environmentOptions(
   configurations: readonly ClassifiedBuildConfiguration[],
   projectId: string,
-  platforms: readonly AssistantPlatformFilter[],
 ): MobileEnvironment[] {
-  const selectedPlatforms = new Set(platforms)
   return mobileEnvironments.filter((environment) =>
     environment !== 'Unclassified' && configurations.some((configuration) =>
       configuration.projectId === projectId &&
-      configuration.environment === environment &&
-      (selectedPlatforms.size === 0 ||
-        selectedPlatforms.has(platformFilterFor(configuration))),
+      configuration.environment === environment,
     ),
   )
 }
@@ -407,17 +396,15 @@ function resolvedSelection(
   const platforms = current.projectId === projectId
     ? current.platforms.filter((platform) => availablePlatforms.includes(platform))
     : []
-  const environments = environmentOptions(configurations, projectId, platforms)
-  const preferredEnvironment = current.projectId === projectId
-    ? current.environment
-    : ''
+  const environments = environmentOptions(configurations, projectId)
+  const preferredEnvironments = current.projectId === projectId
+    ? current.environments
+    : []
 
   return {
     projectId,
     platforms,
-    environment: preferredEnvironment === '' || environments.includes(preferredEnvironment)
-      ? preferredEnvironment
-      : '',
+    environments: preferredEnvironments.filter((environment) => environments.includes(environment)),
   }
 }
 
@@ -425,7 +412,7 @@ function parametersFromState(state: AssistantState): AssistantSearchParameters {
   return {
     projectId: state.selectedProjectId,
     platforms: state.selectedPlatforms,
-    environment: state.selectedEnvironment,
+    environments: state.selectedEnvironments,
     searchMode: state.searchMode,
     queries: state.searchQueries,
   }
@@ -454,18 +441,16 @@ export function useAssistantController({
   const searchRequestRef = useRef(0)
   const searchAbortRef = useRef<AbortController | undefined>(undefined)
   const restoreStoredHistoryRef = useRef(true)
+  const buildSearchOptionsController = useBuildSearchOptions(service)
+  const deactivateBuildSearchOptions = buildSearchOptionsController.deactivate
 
   const projects = useMemo(
     () => projectsFrom(state.configurations),
     [state.configurations],
   )
   const environments = useMemo(
-    () => environmentOptions(
-      state.configurations,
-      state.selectedProjectId,
-      state.selectedPlatforms,
-    ),
-    [state.configurations, state.selectedPlatforms, state.selectedProjectId],
+    () => environmentOptions(state.configurations, state.selectedProjectId),
+    [state.configurations, state.selectedProjectId],
   )
   const hasOtherConfigurations = state.configurations.some((configuration) =>
     configuration.projectId === state.selectedProjectId &&
@@ -474,19 +459,31 @@ export function useAssistantController({
   )
   const searchableConfigurations = useMemo(() => {
     const selectedPlatforms = new Set(state.selectedPlatforms)
+    const selectedEnvironments = new Set(state.selectedEnvironments)
     return state.configurations.filter((configuration) =>
       configuration.projectId === state.selectedProjectId &&
       !configuration.paused &&
       (selectedPlatforms.size === 0 ||
         selectedPlatforms.has(platformFilterFor(configuration))) &&
-      (state.selectedEnvironment === '' || configuration.environment === state.selectedEnvironment),
+      (selectedEnvironments.size === 0 ||
+        selectedEnvironments.has(configuration.environment)),
     )
   }, [
     state.configurations,
-    state.selectedEnvironment,
+    state.selectedEnvironments,
     state.selectedPlatforms,
     state.selectedProjectId,
   ])
+  const filteredSearchOptionConfigurations = useMemo<BuildSearchOptionsConfiguration[]>(() =>
+    searchableConfigurations.map((configuration) => ({
+      id: configuration.id,
+      signature: `${configuration.environment}:${configuration.os}`,
+    })), [searchableConfigurations])
+  const buildSearchOptions = buildSearchOptionsController.values(
+    state.searchMode,
+    searchableConfigurations.map(({ id }) => id),
+    state.searchQueries[state.searchMode],
+  )
 
   useEffect(() => () => {
     catalogRequestRef.current += 1
@@ -501,6 +498,7 @@ export function useAssistantController({
     const activeSearch = searchAbortRef.current
     searchAbortRef.current = undefined
     activeSearch?.abort()
+    buildSearchOptionsController.deactivate()
     const current = state
     if (current.searchStatus === 'loading') {
       dispatch({ type: 'search-discarded' })
@@ -517,18 +515,33 @@ export function useAssistantController({
         return
       }
       const configurations = classifyBuildConfigurations(result.configurations, classifier)
+      const draft = resolvedParameters(configurations, parametersFromState(current))
+      const sessionScope = `${origin}:${result.sessionUserId ?? 'session'}`
       restoreStoredHistoryRef.current = false
       dispatch({
         type: 'catalog-ready',
         configurations,
-        draft: resolvedParameters(configurations, parametersFromState(current)),
+        draft,
+        sessionUserId: result.sessionUserId ?? 'session',
         appliedSearch: resolvedParameters(configurations, current.appliedSearch),
         searchHistory: history,
         warningMessage: getCatalogWarningMessage(result.skippedConfigurations),
       })
+      buildSearchOptionsController.activateProject({
+        configurations: configurations
+          .filter((configuration) =>
+            configuration.projectId === draft.projectId && !configuration.paused,
+          )
+          .map((configuration) => ({
+            id: configuration.id,
+            signature: `${configuration.environment}:${configuration.os}`,
+          })),
+        projectId: draft.projectId,
+        sessionScope,
+      })
     } catch (error) {
       if (requestId === catalogRequestRef.current) {
-        dispatch({ type: 'catalog-error', message: getSafeErrorMessage(error) })
+        dispatch({ type: 'catalog-error', message: getSafeTeamCityErrorMessage(error) })
       }
     }
   }
@@ -539,6 +552,13 @@ export function useAssistantController({
     }
     const current = parametersFromState(state)
     const normalizedQuery = normalizeBuildSearchQuery(current.queries[current.searchMode])
+    const nextHistory = withRememberedQuery(
+      state.searchHistory,
+      current.searchMode,
+      normalizedQuery,
+    )
+    dispatch({ type: 'remember-query', history: nextHistory })
+    void historyStorage.save(origin, nextHistory).catch(() => undefined)
     const appliedSearch: AssistantSearchParameters = {
       ...current,
       queries: {
@@ -582,18 +602,11 @@ export function useAssistantController({
           matches: result.matches,
           warningMessage: getSearchWarningMessage(result),
         })
-        const nextHistory = withRememberedQuery(
-          state.searchHistory,
-          current.searchMode,
-          normalizedQuery,
-        )
-        dispatch({ type: 'remember-query', history: nextHistory })
-        void historyStorage.save(origin, nextHistory).catch(() => undefined)
         return true
       }
     } catch (error) {
       if (requestId === searchRequestRef.current) {
-        dispatch({ type: 'search-error', message: getSafeErrorMessage(error) })
+        dispatch({ type: 'search-error', message: getSafeTeamCityErrorMessage(error) })
       }
     } finally {
       if (searchAbortRef.current === controller) {
@@ -619,8 +632,9 @@ export function useAssistantController({
     searchRequestRef.current += 1
     searchAbortRef.current?.abort()
     searchAbortRef.current = undefined
+    deactivateBuildSearchOptions()
     dispatch({ type: 'reset-session' })
-  }, [])
+  }, [deactivateBuildSearchOptions])
 
   function clearSearchHistory(mode: BuildSearchMode) {
     const nextHistory = { ...state.searchHistory, [mode]: [] }
@@ -628,22 +642,57 @@ export function useAssistantController({
     void historyStorage.save(origin, nextHistory).catch(() => undefined)
   }
 
+  function selectProject(projectId: string) {
+    buildSearchOptionsController.deactivate()
+    dispatch({ type: 'select-project', projectId })
+    const configurations = state.configurations
+      .filter((configuration) => configuration.projectId === projectId && !configuration.paused)
+      .map((configuration) => ({
+        id: configuration.id,
+        signature: `${configuration.environment}:${configuration.os}`,
+      }))
+    buildSearchOptionsController.activateProject({
+      configurations,
+      projectId,
+      sessionScope: `${origin}:${state.sessionUserId || 'session'}`,
+    })
+  }
+
+  function togglePlatform(platform: AssistantPlatformFilter) {
+    buildSearchOptionsController.stop()
+    dispatch({ type: 'toggle-platform', platform })
+  }
+
+  function toggleEnvironment(environment: MobileEnvironment) {
+    buildSearchOptionsController.stop()
+    dispatch({ type: 'toggle-environment', environment })
+  }
+
+  function refreshBuildSearchOptions() {
+    buildSearchOptionsController.refresh(filteredSearchOptionConfigurations)
+  }
+
   return {
     state,
     projects,
     environments,
+    buildSearchOptions,
+    buildSearchOptionsErrorMessage: buildSearchOptionsController.errorMessage,
+    buildSearchOptionsStatus: buildSearchOptionsController.status,
     hasOtherConfigurations,
     canSearch: state.catalogStatus === 'ready' && searchableConfigurations.length > 0,
     loadCatalog,
-    selectProject: (projectId) => dispatch({ type: 'select-project', projectId }),
-    togglePlatform: (platform) => dispatch({ type: 'toggle-platform', platform }),
-    selectEnvironment: (environment) => dispatch({ type: 'select-environment', environment }),
+    selectProject,
+    togglePlatform,
+    toggleEnvironment,
     selectSearchMode: (mode) => dispatch({ type: 'select-search-mode', mode }),
     setSearchQuery: (mode, query) => dispatch({ type: 'set-search-query', mode, query }),
     clearSearchHistory,
     resetSession,
+    refreshBuildSearchOptions,
     search,
     stopSearch,
+    stopBuildSearchOptions: buildSearchOptionsController.stop,
     toggleBuild: (buildId) => dispatch({ type: 'toggle-build', buildId }),
   }
 }

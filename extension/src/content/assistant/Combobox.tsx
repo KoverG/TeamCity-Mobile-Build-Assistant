@@ -8,6 +8,7 @@ import {
 import { CheckIcon, ChevronIcon } from './Icons'
 import { OverlayScrollbar } from './ScrollArea'
 import { useScrollMetrics } from './useScrollMetrics'
+import { eventPathContains, findEventPathElement } from './eventPath'
 
 export interface ComboboxOption<T extends string> {
   value: T
@@ -33,6 +34,7 @@ export function Combobox<T extends string>({
 }: ComboboxProps<T>) {
   const id = useId()
   const rootRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
   const [open, setOpen] = useState(false)
   const visibleOpen = open && !disabled
@@ -47,8 +49,13 @@ export function Combobox<T extends string>({
       return
     }
     const closeOutside = (event: PointerEvent) => {
-      const root = rootRef.current
-      if (root !== null && !event.composedPath().includes(root)) {
+      const trigger = triggerRef.current
+      const list = listRef.current
+      const scrollbar = findEventPathElement(event, 'tcba-combobox__scrollbar')
+      const insideTrigger = trigger !== null && eventPathContains(event, trigger)
+      const insideList = list !== null && eventPathContains(event, list)
+      const insideScrollbar = scrollbar !== undefined && rootRef.current?.contains(scrollbar) === true
+      if (!insideTrigger && !insideList && !insideScrollbar) {
         setOpen(false)
       }
     }
@@ -127,6 +134,7 @@ export function Combobox<T extends string>({
       <span className="tcba-field-label" id={`${id}-label`}>{label}</span>
       <button
         className="tcba-combobox__trigger"
+        ref={triggerRef}
         type="button"
         role="combobox"
         aria-controls={`${id}-listbox`}

@@ -43,6 +43,45 @@ describe('createTeamCityService', () => {
     expect(client.requestedPaths).toEqual([bulkPath])
   })
 
+  it('adds the opaque current-user id to the catalog for session-scoped caching', async () => {
+    const currentUserPath = '/app/rest/users/current?fields=id'
+    const catalogPath =
+      '/app/rest/buildTypes?fields=count,buildType(id,name,projectId,projectName,paused),nextHref'
+    const client = new FakeTeamCityHttpClient(new Map([
+      [currentUserPath, { id: 'synthetic-user' }],
+      [
+        catalogPath,
+        {
+          buildType: [
+            {
+              id: 'Synthetic_Android',
+              name: 'Android',
+              projectId: 'Synthetic_Project',
+              projectName: 'Synthetic Project',
+              paused: false,
+            },
+          ],
+        },
+      ],
+    ]))
+    const service = createTeamCityService(client)
+
+    await expect(service.loadCatalog()).resolves.toEqual({
+      configurations: [
+        {
+          id: 'Synthetic_Android',
+          name: 'Android',
+          projectId: 'Synthetic_Project',
+          projectName: 'Synthetic Project',
+          paused: false,
+        },
+      ],
+      sessionUserId: 'synthetic-user',
+      skippedConfigurations: 0,
+      transport: 'main-world',
+    })
+    expect(client.requestedPaths).toEqual([currentUserPath, catalogPath])
+  })
   it('loads several configurations through one combined TeamCity request', async () => {
     const buildTypeIds = ['Synthetic_Android', 'Synthetic_iOS']
     const path = createSuccessfulBuildsPath(buildTypeIds)

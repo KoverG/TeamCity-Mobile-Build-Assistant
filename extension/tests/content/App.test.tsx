@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { LegacySelectionCleanup } from '../../src/storage/LegacySelectionCleanup'
 import type { SearchHistoryStorage } from '../../src/storage/SearchHistoryStorage'
@@ -45,20 +45,32 @@ function createService(): TeamCityService {
       skippedConfigurations: 0,
       transport: 'main-world',
     }),
-    loadBuilds: vi.fn(async (buildTypeIds: readonly string[]) => ({
-      builds: [
-        {
-          id: '12345',
-          buildTypeId: buildTypeIds[0] ?? 'Synthetic_Fallback',
-          number: '42',
-          branchName: 'feature/synthetic',
-          defaultBranch: false,
-          finishDate: '20260811T101500+0000',
-        },
-      ],
-      failedConfigurations: 0,
-      transport: 'main-world' as const,
-    })),
+    loadBuilds: vi.fn(async (buildTypeIds, options) => {
+      const build = {
+        id: '12345',
+        buildTypeId: buildTypeIds[0] ?? 'Synthetic_Fallback',
+        number: '42',
+        branchName: 'feature/TEST-1111-synthetic',
+        defaultBranch: false,
+        finishDate: '20260811T101500+0000',
+      }
+      if (options?.collectBuilds === false) {
+        await options.onPage?.({
+          builds: [build],
+          transport: 'main-world',
+        })
+        return {
+          builds: [],
+          failedConfigurations: 0,
+          transport: 'main-world' as const,
+        }
+      }
+      return {
+        builds: [build],
+        failedConfigurations: 0,
+        transport: 'main-world' as const,
+      }
+    }),
     resolveArtifact: vi.fn().mockResolvedValue({
       status: 'Resolved',
       candidates: [
@@ -236,13 +248,16 @@ describe('App', () => {
     selectComboboxOption('Проект', 'Synthetic Mobile')
     const taskInput = screen.getByRole('textbox', { name: 'Поиск по номеру задачи' })
     fireEvent.focus(taskInput)
+    fireEvent.click(screen.getByRole('tab', { name: 'История поиска' }))
     const historyOption = screen.getByRole('option', { name: /^TASK-123/ })
     expect(historyOption).toHaveClass('tcba-field-option')
     expect(historyOption.closest('[role="listbox"]')?.parentElement).toHaveClass('tcba-field-dropdown')
-    expect(screen.getByRole('button', { name: 'Очистить' }).closest('[role="option"]')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Очистить историю поиска' }).closest('[role="option"]')).toBeNull()
     expect(screen.queryByText('Недавние запросы')).not.toBeInTheDocument()
     fireEvent.click(historyOption)
-    expect(service.loadBuilds).not.toHaveBeenCalled()
+    expect(vi.mocked(service.loadBuilds).mock.calls.filter(
+      ([, options]) => options?.collectBuilds !== false,
+    )).toHaveLength(0)
 
     const buildModeButton = screen.getByRole('button', { name: 'Искать по номеру билда' })
     expect(taskInput.closest('.tcba-search-field__control')).not.toContainElement(buildModeButton)
@@ -275,9 +290,16 @@ describe('App', () => {
   it('stops an empty search and shows the regular state with a neutral popup', async () => {
     const service = createService()
     let finishLoading: ((value: Awaited<ReturnType<TeamCityService['loadBuilds']>>) => void) | undefined
-    vi.mocked(service.loadBuilds).mockImplementation(() => new Promise((resolve) => {
-      finishLoading = resolve
-    }))
+    vi.mocked(service.loadBuilds).mockImplementation((_, options) => {
+      if (options?.collectBuilds === false) {
+        return Promise.resolve({
+          builds: [], failedConfigurations: 0, transport: 'main-world',
+        })
+      }
+      return new Promise((resolve) => {
+        finishLoading = resolve
+      })
+    })
     render(
       <App
         service={service}
@@ -300,7 +322,9 @@ describe('App', () => {
     expect(screen.getByText('Не удалось найти сборки')).toBeInTheDocument()
     const stoppedToast = (await screen.findByText('Поиск остановлен')).closest('.tcba-toast')
     expect(stoppedToast).toHaveClass('tcba-toast--neutral')
-    expect(vi.mocked(service.loadBuilds).mock.calls[0]?.[1]?.signal).toHaveProperty('aborted', true)
+    expect(vi.mocked(service.loadBuilds).mock.calls.find(
+      ([, options]) => options?.collectBuilds !== false,
+    )?.[1]?.signal).toHaveProperty('aborted', true)
     finishLoading?.({ builds: [], failedConfigurations: 0, transport: 'main-world' })
     await waitFor(() => expect(screen.getByText('Не удалось найти сборки')).toBeInTheDocument())
   })
@@ -679,7 +703,9 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Повторить' }))
     await screen.findByText('Android Stage')
 
-    expect(service.loadBuilds).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(service.loadBuilds).mock.calls.filter(
+      ([, options]) => options?.collectBuilds !== false,
+    )).toHaveLength(2)
     expect(service.resolveArtifact).toHaveBeenCalledTimes(2)
     expect(service.loadCatalog).toHaveBeenCalledTimes(1)
   })
@@ -743,6 +769,7 @@ describe('App', () => {
 
     const taskInput = screen.getByRole('textbox', { name: 'Поиск по номеру задачи' })
     fireEvent.focus(taskInput)
+    fireEvent.click(screen.getByRole('tab', { name: 'История поиска' }))
     expect(screen.getAllByRole('option').filter((option) => option.textContent?.startsWith('TASK-')))
       .toHaveLength(5)
   })
@@ -752,9 +779,16 @@ describe('App', () => {
     const storage = createStorage()
     const historyStorage = createHistoryStorage({ task: ['TASK-5'], build: [] })
     let finishLoading: ((value: Awaited<ReturnType<TeamCityService['loadBuilds']>>) => void) | undefined
-    vi.mocked(service.loadBuilds).mockImplementation(() => new Promise((resolve) => {
-      finishLoading = resolve
-    }))
+    vi.mocked(service.loadBuilds).mockImplementation((_, options) => {
+      if (options?.collectBuilds === false) {
+        return Promise.resolve({
+          builds: [], failedConfigurations: 0, transport: 'main-world',
+        })
+      }
+      return new Promise((resolve) => {
+        finishLoading = resolve
+      })
+    })
     render(
       <App
         service={service}
@@ -784,7 +818,12 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Остановить поиск сборок' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Закрыть панель' }))
-    finishLoading?.({ builds: [], failedConfigurations: 0, transport: 'main-world' })
+    await act(async () => {
+      finishLoading?.({ builds: [], failedConfigurations: 0, transport: 'main-world' })
+    })
+    await waitFor(() => expect(
+      screen.queryByRole('button', { name: 'Остановить поиск сборок' }),
+    ).not.toBeInTheDocument())
     await waitFor(() => expect(historyStorage.save).toHaveBeenCalledWith(
       'https://teamcity.example.test',
       { task: ['TASK-NEW', 'TASK-5'], build: [] },
@@ -796,6 +835,7 @@ describe('App', () => {
     expect(screen.getByRole('combobox', { name: 'Проект' })).toHaveTextContent('Выберите проект')
     expect(screen.getByRole('button', { name: 'Показать результаты поиска' })).toHaveAttribute('aria-expanded', 'false')
     fireEvent.focus(screen.getByRole('textbox', { name: 'Поиск по номеру задачи' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'История поиска' }))
     expect(screen.getByRole('option', { name: /^TASK-NEW/ })).toBeInTheDocument()
   })
 

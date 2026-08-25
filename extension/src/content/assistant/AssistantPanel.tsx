@@ -1,10 +1,10 @@
-import type { MobileEnvironment } from '../../teamcity/BuildConfigurationClassifier'
 import type { AssistantController } from './useAssistantController'
 import { Combobox } from './Combobox'
 import { LoadingIcon, StopIcon } from './Icons'
+import { MultiCombobox } from './MultiCombobox'
 import { PanelToolbar } from './PanelToolbar'
 import { PlatformFilter } from './PlatformFilter'
-import { SearchField } from './SearchField'
+import { SearchOptionsField } from './SearchOptionsField'
 
 interface AssistantPanelProps {
   id: string
@@ -43,23 +43,31 @@ export function AssistantPanel({ id, controller, onSearch, onStopSearch, onClose
           disabled={catalogLoading || searching || controller.projects.length === 0}
           onChange={controller.selectProject}
         />
-        <SearchField
+        <SearchOptionsField
+          key={`${state.searchMode}:${state.selectedProjectId}`}
+          currentOptions={controller.buildSearchOptions}
+          currentOptionsErrorMessage={controller.buildSearchOptionsErrorMessage}
+          currentOptionsStatus={controller.buildSearchOptionsStatus}
           mode={state.searchMode}
           queries={state.searchQueries}
+          projectSelected={state.selectedProjectId.length > 0}
           history={state.searchHistory}
           disabled={catalogLoading || searching}
           onModeChange={controller.selectSearchMode}
           onQueryChange={controller.setSearchQuery}
           onClearHistory={controller.clearSearchHistory}
+          onDropdownClose={controller.stopBuildSearchOptions}
+          onRefresh={controller.refreshBuildSearchOptions}
           onSearch={onSearch}
+          onStop={controller.stopBuildSearchOptions}
         />
-        <Combobox<MobileEnvironment>
+        <MultiCombobox
           label="Окружение"
-          value={state.selectedEnvironment}
+          selected={state.selectedEnvironments}
           placeholder="Выберите окружение"
           options={controller.environments.map((environment) => ({ value: environment, label: environment }))}
           disabled={state.selectedProjectId.length === 0 || catalogLoading || searching || controller.environments.length === 0}
-          onChange={controller.selectEnvironment}
+          onToggle={controller.toggleEnvironment}
         />
         <PlatformFilter
           selected={state.selectedPlatforms}

@@ -39,8 +39,9 @@ export function createTeamCityService(
 ): TeamCityService {
   return {
     async loadCatalog() {
-      await probeSession(client)
-      return loadBuildConfigurations(client)
+      const session = await probeSession(client)
+      const catalog = await loadBuildConfigurations(client)
+      return { ...catalog, sessionUserId: session.userId }
     },
     async loadBuilds(buildTypeIds, options) {
       const uniqueBuildTypeIds = [...new Set(buildTypeIds)]

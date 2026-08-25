@@ -12,14 +12,16 @@ describe('content style boundaries', () => {
   const navTabStyles = readStyles('../../src/content/TeamCityNavTab.css')
   const panelStyles = readStyles('../../src/content/AssistantPanel.css')
   const controlStyles = readStyles('../../src/content/assistant/AssistantControls.css')
+  const searchOptionsStyles = readStyles('../../src/content/assistant/SearchOptions.css')
   const resultStyles = readStyles('../../src/content/assistant/BuildResults.css')
   const assistantStyles = [
     panelStyles,
     controlStyles,
+    searchOptionsStyles,
     resultStyles,
   ].join('\n')
   const diagnosticStyles = readStyles('../../src/diagnostics/DiagnosticConsole.css')
-  const assistantOnlySelectors = /\.tcba-(assistant(?:\b|__|--)|assistant-workspace(?:\b|--)|toolbar(?:\b|__|--)|combobox(?:\b|__|--)|field-(?:dropdown|option)(?:\b|__|--)|platform(?:\b|__|--)|search-field(?:\b|__|--)|results(?:\b|__|--)|build-row(?:\b|__|--)|build-card(?:\b|__|--)|action-button(?:\b|--)|search-button(?:\b|--)|stop-button(?:\b|--)|toast\b)/
+  const assistantOnlySelectors = /\.tcba-(assistant(?:\b|__|--)|assistant-workspace(?:\b|--)|toolbar(?:\b|__|--)|combobox(?:\b|__|--)|field-(?:dropdown|option)(?:\b|__|--)|platform(?:\b|__|--)|search-(?:field|options)(?:\b|__|--)|results(?:\b|__|--)|build-row(?:\b|__|--)|build-card(?:\b|__|--)|action-button(?:\b|--)|search-button(?:\b|--)|stop-button(?:\b|--)|toast\b)/
   const navTabOnlySelectors = /\.tcba-(shell(?:\b|--)|nav-tab(?:\b|__|--)|tab__(?:\w|-)+|launcher\b|panel-stack\b)/
 
   it('keeps component selectors out of shared tokens', () => {
@@ -60,12 +62,13 @@ describe('content style boundaries', () => {
   it('shares one dropdown surface and option primitive across selects and search history', () => {
     expect(controlStyles.match(/\.tcba-field-dropdown\s*\{/g)).toHaveLength(1)
     expect(controlStyles.match(/\.tcba-field-option\s*\{/g)).toHaveLength(1)
-    expect(controlStyles).not.toMatch(/\.tcba-search-field__history\s*\{[^}]*background:/s)
+    expect(controlStyles).not.toContain('.tcba-search-field__history')
     expect(controlStyles).toMatch(/\.tcba-search-field__modes\s*\{[^}]*width: 55px;[^}]*height: 21px;[^}]*padding: 1px;/s)
     expect(controlStyles).toMatch(/\.tcba-search-field__modes::before\s*\{[^}]*width: 25px;[^}]*height: 17px;/s)
     expect(controlStyles).toMatch(/\.tcba-search-field__modes--task::before\s*\{[^}]*translateX\(26px\)/s)
     expect(controlStyles).toMatch(/\.tcba-search-field__modes button\s*\{[^}]*height: 17px;/s)
-    expect(controlStyles).toMatch(/\.tcba-search-field__history-actions\s*\{[^}]*height: 34px;/s)
+    expect(searchOptionsStyles).toMatch(/\.tcba-search-options__sources\s*\{[^}]*height: 31px;/s)
+    expect(searchOptionsStyles).toMatch(/\.tcba-search-options__list\s*\{[^}]*max-height: calc\(5 \* var\(--tcba-field-option-height\)\);/s)
   })
 
   it('sizes additional-action slots from the number of rendered controls', () => {
@@ -83,10 +86,13 @@ describe('content style boundaries', () => {
   it('keeps search cancellation and mascot-state spacing aligned with the layout', () => {
     expect(panelStyles).toMatch(/\.tcba-assistant__search\s*\{[^}]*position: relative;/s)
     expect(panelStyles).toMatch(/\.tcba-stop-button\s*\{[^}]*left: calc\(50% \+ 102px\);[^}]*width: 32px;[^}]*height: 40px;/s)
-    expect(resultStyles).toMatch(/\.tcba-results-state\s*\{[^}]*display: flex;[^}]*min-height: 0;[^}]*flex-direction: column;[^}]*overflow: hidden;/s)
-    expect(resultStyles).toMatch(/\.tcba-results-state__visual\s*\{[^}]*max-height: 292px;[^}]*min-height: 0;[^}]*flex: 1 1 auto;/s)
-    expect(resultStyles).toMatch(/\.tcba-results-state__mascot\s*\{[^}]*height: 100%;[^}]*min-height: 0;[^}]*max-height: 100%;/s)
-    expect(resultStyles).toMatch(/\.tcba-results-state__loader\s*\{[^}]*height: 32px;[^}]*flex: 0 0 32px;[^}]*margin-top: 10px;/s)
+    expect(resultStyles).toMatch(/\.tcba-results-state\s*\{[^}]*display: flex;[^}]*min-height: 0;[^}]*flex-direction: column;[^}]*overflow: hidden;[^}]*padding: 0 0 33px;/s)
+    expect(resultStyles).toMatch(/\.tcba-results-state__visual\s*\{[^}]*max-height: 308px;[^}]*min-height: 0;[^}]*flex: 1 1 auto;/s)
+    expect(resultStyles).toMatch(/\.tcba-results-state__mascot\s*\{[^}]*height: 100%;[^}]*min-height: 0;[^}]*max-height: 100%;[^}]*transform: translateY\(15px\);/s)
+    expect(resultStyles).toMatch(/\.tcba-results-state--waiting\s*\{[^}]*padding-bottom: 10px;/s)
+    expect(resultStyles).toMatch(/\.tcba-results-state__loader\s*\{[^}]*width: 34px;[^}]*height: 34px;[^}]*flex: 0 0 34px;[^}]*margin-top: 5px;/s)
+    expect(resultStyles).toMatch(/@keyframes tcba-mascot-float\s*\{[^}]*translateY\(27px\);[^}]*\}[^}]*translateY\(14px\);/s)
+    expect(controlStyles).toMatch(/\.tcba-toolbar__handle\s*\{[^}]*background: #c8c8c8;/s)
   })
 
   it('keeps the result surface under the main panel with the SVG dimensions', () => {

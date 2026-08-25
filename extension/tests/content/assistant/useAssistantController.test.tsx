@@ -19,9 +19,16 @@ describe('useAssistantController', () => {
         skippedConfigurations: 0,
         transport: 'main-world',
       }),
-      loadBuilds: vi.fn().mockImplementation(() => new Promise((resolve) => {
-        finishLoading = resolve
-      })),
+      loadBuilds: vi.fn().mockImplementation((_, options) => {
+        if (options?.collectBuilds === false) {
+          return Promise.resolve({
+            builds: [], failedConfigurations: 0, transport: 'main-world',
+          })
+        }
+        return new Promise((resolve) => {
+          finishLoading = resolve
+        })
+      }),
       resolveArtifact: vi.fn(),
     }
     const { result } = renderHook(() => useAssistantController({
@@ -50,7 +57,9 @@ describe('useAssistantController', () => {
     expect(result.current.state.searchStatus).toBe('ready')
     expect(result.current.state.hasSearched).toBe(true)
     expect(result.current.state.matches).toEqual([])
-    expect(vi.mocked(service.loadBuilds).mock.calls[0]?.[1]?.signal).toHaveProperty('aborted', true)
+    expect(vi.mocked(service.loadBuilds).mock.calls.find(
+      ([, options]) => options?.collectBuilds !== false,
+    )?.[1]?.signal).toHaveProperty('aborted', true)
 
     await act(async () => {
       finishLoading?.({ builds: [], failedConfigurations: 0, transport: 'main-world' })

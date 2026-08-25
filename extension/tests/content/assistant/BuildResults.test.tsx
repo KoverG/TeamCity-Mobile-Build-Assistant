@@ -31,7 +31,7 @@ describe('BuildResults partial search warning', () => {
   it('keeps successful matches visible and allows retrying failed checks', () => {
     const onRetry = vi.fn()
 
-    render(
+    const { container } = render(
       <BuildResults
         status="ready"
         hasSearched
@@ -50,6 +50,9 @@ describe('BuildResults partial search warning', () => {
       'Результаты неполные: не удалось проверить 1 из 3 сборок.',
     )
     expect(screen.getByRole('button', { name: 'Открыть билд #42 в TeamCity' })).toBeVisible()
+    const platform = container.querySelector('.tcba-build-card__platform')
+    expect(platform?.querySelector('svg')).toHaveAttribute('viewBox', '126 196 26 26')
+    expect(platform?.querySelector('small')).toHaveTextContent('apk')
 
     fireEvent.click(screen.getByRole('button', { name: 'Повторить' }))
 

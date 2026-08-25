@@ -26,6 +26,7 @@ export interface BuildsResult {
 }
 
 export interface BuildLoadOptions {
+  collectBuilds?: boolean
   maximumBuilds?: number
   pageSize?: number
   maximumPages?: number
@@ -131,7 +132,9 @@ export async function loadSuccessfulBuilds(
   buildTypeIds: string | readonly string[],
   options: BuildLoadOptions = {},
 ): Promise<BuildsResult> {
+  const collectBuilds = options.collectBuilds ?? true
   const builds = new Map<string, TeamCityBuild>()
+  const seenBuildIds = new Set<string>()
   const requestedMaximum = Math.trunc(options.maximumBuilds ?? Number.MAX_SAFE_INTEGER)
   const maximumBuilds = Number.isFinite(requestedMaximum)
     ? Math.min(Math.max(requestedMaximum, 1), Number.MAX_SAFE_INTEGER)
@@ -153,7 +156,7 @@ export async function loadSuccessfulBuilds(
   const visitedPaths = new Set<string>()
 
   let page = 0
-  for (; nextPath !== undefined && page < maximumPages && builds.size < maximumBuilds; page += 1) {
+  for (; nextPath !== undefined && page < maximumPages && seenBuildIds.size < maximumBuilds; page += 1) {
     if (visitedPaths.has(nextPath)) {
       throw new TeamCityError(
         'TraversalLimitExceeded',
@@ -174,8 +177,11 @@ export async function loadSuccessfulBuilds(
 
     const pageBuilds: TeamCityBuild[] = []
     for (const build of readArray(root.build).map(parseBuild).filter((item) => item !== undefined)) {
-      if (builds.size < maximumBuilds && !builds.has(build.id)) {
-        builds.set(build.id, build)
+      if (seenBuildIds.size < maximumBuilds && !seenBuildIds.has(build.id)) {
+        seenBuildIds.add(build.id)
+        if (collectBuilds) {
+          builds.set(build.id, build)
+        }
         pageBuilds.push(build)
       }
     }
@@ -187,7 +193,7 @@ export async function loadSuccessfulBuilds(
     nextPath = nextHref === undefined ? undefined : toRestPath(nextHref)
   }
 
-  if (nextPath !== undefined && builds.size < maximumBuilds && page >= maximumPages) {
+  if (nextPath !== undefined && seenBuildIds.size < maximumBuilds && page >= maximumPages) {
     throw new TeamCityError('TraversalLimitExceeded', 'TeamCity builds pagination limit was exceeded.')
   }
 

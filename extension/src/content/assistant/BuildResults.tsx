@@ -136,7 +136,9 @@ function BuildCard({
           onKeyDown={handleContextKey}
         />
         <span className="tcba-build-card__platform" aria-hidden="true">
-          {match.configuration.platform === 'android' ? <AndroidIcon /> : <AppleIcon />}
+          {match.configuration.platform === 'android'
+            ? <AndroidIcon viewBox="126 196 26 26" />
+            : <AppleIcon />}
           <small>{match.configuration.platform === 'android' ? 'apk' : 'ipa'}</small>
         </span>
         <span className="tcba-build-card__content">

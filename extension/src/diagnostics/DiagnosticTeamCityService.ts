@@ -40,7 +40,11 @@ export class DiagnosticTeamCityService implements TeamCityService {
     )
     try {
       const result = await this.inner.loadBuilds(buildTypeIds, options)
-      this.store.emit('UI', 'success', `Получено builds: ${result.builds.length}.`)
+      this.store.emit(
+        'UI',
+        'success',
+        options?.collectBuilds === false ? 'Метаданные builds обработаны потоково.' : `Получено builds: ${result.builds.length}.`,
+      )
       return result
     } catch (error) {
       this.store.emit('UI', 'error', `Builds: ${errorCode(error)}.`)
